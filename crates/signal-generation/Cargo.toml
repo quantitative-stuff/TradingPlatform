@@ -1,0 +1,8 @@
+[package]
+name = "signal-generation"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+market-types = { path = "../market-types" }
+feature-engineering = { path = "../feature-engineering" }

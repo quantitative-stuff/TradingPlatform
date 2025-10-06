@@ -1,0 +1,33 @@
+{   "ws_url": "wss://stream.bybit.com/v5/public/spot",
+    "futures_ws_url": "wss://stream.bybit.com/v5/public/linear",
+    "output_dir": "data/bybit",
+    "feed_config":{
+        "exchange":"bybit",
+        "asset_type":["spot", "linear"]
+
+    },
+
+    "subscribe_data":{
+        "spot_symbols": ["BTCUSDT",
+                "ETHUSDT",
+                "XRPUSDT",
+                "ETCUSDT"],
+        "futures_symbols": ["BTCUSDT",
+                "ETHUSDT",
+                "XRPUSDT",
+                "ETCUSDT"],
+        "stream_type": ["orderbook", "trade"], 
+        "orderdepth": 50
+        },
+    "connect_config":{
+        "ws_url": "wss://stream.bybit.com/v5/public/spot",
+        "testnet_url": "wss://stream-testnet.bybit.com/v5/public/spot",
+        "mainnet_url": "wss://stream.bybit.com/v5/public/spot",
+        "use_testnet": false,
+        "connection_delay_ms": 500,
+        "max_connections": 20,
+        "max_retry_delay_secs": 60,
+        "initial_retry_delay_secs": 2
+    }
+
+}

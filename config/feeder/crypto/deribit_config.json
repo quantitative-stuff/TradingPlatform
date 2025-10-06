@@ -1,0 +1,40 @@
+{
+  "connect_config": {
+    "ws_url": "wss://www.deribit.com/ws/api/v2",
+    "futures_ws_url": "wss://www.deribit.com/ws/api/v2",
+    "sandbox_url": "wss://test.deribit.com/ws/api/v2",
+    "mainnet_url": "https://www.deribit.com/api/v2",
+    "testnet_url": "https://test.deribit.com/api/v2",
+    "use_testnet": false,
+    "requires_auth": false,
+    "timeout_secs": 10,
+    "initial_retry_delay_secs": 5,
+    "max_retry_delay_secs": 300,
+    "connection_delay_ms": 200
+  },
+  "subscribe_data": {
+    "spot_symbols": [],
+    "futures_symbols": [
+      "BTC-PERPETUAL",
+      "ETH-PERPETUAL"
+    ],
+    "option_symbols": [
+      "BTC-5SEP25-80000-C",
+      "BTC-5SEP25-80000-P",
+      "ETH-5SEP25-35000-C"
+    ],
+    "stream_type": ["trades", "book", "ticker", "quote"],
+    "order_depth": 20
+  },
+  "feed_config": {
+    "asset_type": ["perpetual", "futures"],
+    "exchange": "deribit",
+    "feed_data_type": ["trade", "orderbook", "ticker"],
+    "max_symbols_per_connection": 100
+  },
+  "rate_limits": {
+    "requests_per_second": 20,
+    "websocket_connections_max": 10
+  },
+  "output_dir": "data/deribit"
+}

@@ -1,0 +1,90 @@
+{
+    "output_dir": "data/binance",
+    "feed_config": {
+        "exchange": "binance",
+        "asset_type": ["spot", "futures"],
+        "max_symbols_per_connection": 20,
+        "connection_timeout_seconds": 30,
+        "reconnect_delay_seconds": 5,
+        "max_reconnect_attempts": 10
+    },
+    "subscribe_data": {
+        "spot_symbols": [
+            "BTCUSDT", "ETHUSDT", "XRPUSDT", "ADAUSDT", "DOTUSDT",
+            "LINKUSDT", "LTCUSDT", "BCHUSDT", "XLMUSDT", "VETUSDT",
+            "TRXUSDT", "FILUSDT", "THETAUSDT", "EOSUSDT", "AAVEUSDT",
+            "ATOMUSDT", "NEOUSDT", "FTTUSDT", "ALGOUSDT", "IOTAUSDT",
+            "XMRUSDT", "DASHUSDT", "ZECUSDT", "ETCUSDT", "WAVESUSDT",
+            "SUSHIUSDT", "SNXUSDT", "COMPUSDT", "YFIUSDT", "UNIUSDT",
+            "AVAXUSDT", "SOLUSDT", "MATICUSDT", "NEARUSDT", "FTMUSDT",
+            "ALICEUSDT", "ICPUSDT", "DOGEUSDT", "SHIBUSDT", "MANAUSDT",
+            "SANDUSDT", "AXSUSDT", "GALAUSDT", "ROSEUSDT", "CHZUSDT",
+            "HOTUSDT", "ENJUSDT", "BATUSDT", "ZILUSDT", "QTUMUSDT",
+            "ONTUSDT", "ICXUSDT", "NANOUSDT", "HBARUSDT", "ONEUSDT",
+            "IOTXUSDT", "ANKRUSDT", "ZRXUSDT", "OMGUSDT", "KSMUSDT",
+            "DOTUSDT", "KAVAUSDT", "BANDUSDT", "RSRUSDT", "STORJUSDT",
+            "SKLUSDT", "GRTUSDT", "OCEANUSDT", "RENUSDT", "CKBUSDT",
+            "COTIUSDT", "CHRUSDT", "MASKUSDT", "DYDXUSDT", "IMXUSDT",
+            "ENSUSDT", "GODSUSDT", "RAREUSDT", "APEUSDT", "GMTUSDT",
+            "OPUSDT", "ARBUSDT", "INJUSDT", "STXUSDT", "CFXUSDT",
+            "SUIUSDT", "SEIUSDT", "PYRUSDT", "RNDRUSDT", "FETUSDT",
+            "AGIXUSDT", "OCEANUSDT", "NMRUSDT", "LDOUSDT", "SSVUSDT",
+            "ARUSDT", "STORJUSDT", "FILUSDT", "ICPUSDT", "HNTUSDT",
+            "IOTXUSDT", "ANKRUSDT", "ZRXUSDT", "OMGUSDT", "KSMUSDT",
+            "DOTUSDT", "KAVAUSDT", "BANDUSDT", "RSRUSDT", "STORJUSDT",
+            "SKLUSDT", "GRTUSDT", "OCEANUSDT", "RENUSDT", "CKBUSDT",
+            "COTIUSDT", "CHRUSDT", "MASKUSDT", "DYDXUSDT", "IMXUSDT",
+            "ENSUSDT", "GODSUSDT", "RAREUSDT", "APEUSDT", "GMTUSDT",
+            "OPUSDT", "ARBUSDT", "INJUSDT", "STXUSDT", "CFXUSDT",
+            "SUIUSDT", "SEIUSDT", "PYRUSDT", "RNDRUSDT", "FETUSDT",
+            "AGIXUSDT", "OCEANUSDT", "NMRUSDT", "LDOUSDT", "SSVUSDT",
+            "ARUSDT", "STORJUSDT", "FILUSDT", "ICPUSDT", "HNTUSDT"
+        ],
+        "futures_symbols": [
+            "BTCUSDT", "ETHUSDT", "XRPUSDT", "ADAUSDT", "DOTUSDT",
+            "LINKUSDT", "LTCUSDT", "BCHUSDT", "XLMUSDT", "VETUSDT",
+            "TRXUSDT", "FILUSDT", "THETAUSDT", "EOSUSDT", "AAVEUSDT",
+            "ATOMUSDT", "NEOUSDT", "FTTUSDT", "ALGOUSDT", "IOTAUSDT",
+            "XMRUSDT", "DASHUSDT", "ZECUSDT", "ETCUSDT", "WAVESUSDT",
+            "SUSHIUSDT", "SNXUSDT", "COMPUSDT", "YFIUSDT", "UNIUSDT",
+            "AVAXUSDT", "SOLUSDT", "MATICUSDT", "NEARUSDT", "FTMUSDT",
+            "ALICEUSDT", "ICPUSDT", "DOGEUSDT", "SHIBUSDT", "MANAUSDT",
+            "SANDUSDT", "AXSUSDT", "GALAUSDT", "ROSEUSDT", "CHZUSDT",
+            "HOTUSDT", "ENJUSDT", "BATUSDT", "ZILUSDT", "QTUMUSDT",
+            "ONTUSDT", "ICXUSDT", "NANOUSDT", "HBARUSDT", "ONEUSDT",
+            "IOTXUSDT", "ANKRUSDT", "ZRXUSDT", "OMGUSDT", "KSMUSDT",
+            "DOTUSDT", "KAVAUSDT", "BANDUSDT", "RSRUSDT", "STORJUSDT",
+            "SKLUSDT", "GRTUSDT", "OCEANUSDT", "RENUSDT", "CKBUSDT",
+            "COTIUSDT", "CHRUSDT", "MASKUSDT", "DYDXUSDT", "IMXUSDT",
+            "ENSUSDT", "GODSUSDT", "RAREUSDT", "APEUSDT", "GMTUSDT",
+            "OPUSDT", "ARBUSDT", "INJUSDT", "STXUSDT", "CFXUSDT",
+            "SUIUSDT", "SEIUSDT", "PYRUSDT", "RNDRUSDT", "FETUSDT",
+            "AGIXUSDT", "OCEANUSDT", "NMRUSDT", "LDOUSDT", "SSVUSDT",
+            "ARUSDT", "STORJUSDT", "FILUSDT", "ICPUSDT", "HNTUSDT"
+        ],
+        "stream_type": ["trade", "orderbook"],
+        "order_depth": 20
+    },
+    "trading_config": {
+        "max_position": 0.01,
+        "min_spread": 10.0,
+        "tick_size": 0.01
+    },
+    "connect_config": {
+        "ws_url": "wss://stream.binance.com:9443/ws",
+        "futures_ws_url": "wss://fstream.binance.com/ws",
+        "testnet_url": "https://testnet.binancefuture.com",
+        "mainnet_url": "https://fapi.binance.com",
+        "use_testnet": false,
+        "connection_delay_ms": 100,
+        "max_connections": 100,
+        "max_retry_delay_secs": 300,
+        "initial_retry_delay_secs": 5
+    },
+    "logging_config": {
+        "log_level": "info",
+        "log_file": "logs/binance_feeder.log",
+        "max_log_size_mb": 100,
+        "log_rotation": "daily"
+    }
+}

@@ -1,0 +1,11 @@
+[package]
+name = "backtesting"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+market-types = { path = "../market-types" }
+matching-engine = { path = "../matching-engine" }
+feature-engineering = { path = "../feature-engineering" }
+signal-generation = { path = "../signal-generation" }
+oms = { path = "../oms" }

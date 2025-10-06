@@ -1,0 +1,9 @@
+[package]
+name = "database"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+market-types = { path = "../market-types" }
+anyhow = { workspace = true }
+tokio = { workspace = true }

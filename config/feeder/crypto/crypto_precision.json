@@ -1,0 +1,152 @@
+{
+  "comment": "Exchange-specific precision configuration for assets",
+  "format": "Exchange:Symbol -> {price_decimals, quantity_decimals}",
+  
+  "precisions": {
+    "Binance:BTC/USDT": {
+      "symbol": "BTC/USDT",
+      "price_decimals": 2,
+      "quantity_decimals": 6,
+      "min_price": 0.01,
+      "min_quantity": 0.000001
+    },
+    "Binance:ETH/USDT": {
+      "symbol": "ETH/USDT",
+      "price_decimals": 2,
+      "quantity_decimals": 5,
+      "min_price": 0.01,
+      "min_quantity": 0.00001
+    },
+    "Binance:SHIB/USDT": {
+      "symbol": "SHIB/USDT",
+      "price_decimals": 8,
+      "quantity_decimals": 0,
+      "min_price": 0.00000001,
+      "min_quantity": 1
+    },
+    "Binance:PEPE/USDT": {
+      "symbol": "PEPE/USDT",
+      "price_decimals": 9,
+      "quantity_decimals": 0,
+      "min_price": 0.000000001,
+      "min_quantity": 1
+    },
+    
+    "Upbit:BTC/KRW": {
+      "symbol": "BTC/KRW",
+      "price_decimals": 0,
+      "quantity_decimals": 8,
+      "min_price": 1,
+      "min_quantity": 0.00000001,
+      "note": "KRW pairs have no decimal places for price"
+    },
+    "Upbit:SHIB/KRW": {
+      "symbol": "SHIB/KRW",
+      "price_decimals": 2,
+      "quantity_decimals": 0,
+      "min_price": 0.01,
+      "min_quantity": 1,
+      "note": "Upbit allows 2 decimals for SHIB/KRW unlike 0 for BTC/KRW"
+    },
+    "Upbit:BTC/USDT": {
+      "symbol": "BTC/USDT",
+      "price_decimals": 4,
+      "quantity_decimals": 6,
+      "min_price": 0.0001,
+      "min_quantity": 0.000001,
+      "note": "Different precision than Binance!"
+    },
+    
+    "Coinbase:BTC/USD": {
+      "symbol": "BTC/USD",
+      "price_decimals": 2,
+      "quantity_decimals": 8,
+      "min_price": 0.01,
+      "min_quantity": 0.00000001
+    },
+    "Coinbase:SHIB/USD": {
+      "symbol": "SHIB/USD",
+      "price_decimals": 8,
+      "quantity_decimals": 0,
+      "min_price": 0.00000001,
+      "min_quantity": 1
+    },
+    
+    "Bybit:BTC/USDT": {
+      "symbol": "BTC/USDT",
+      "price_decimals": 2,
+      "quantity_decimals": 6,
+      "min_price": 0.01,
+      "min_quantity": 0.000001
+    },
+    "Bybit:SHIB/USDT": {
+      "symbol": "SHIB/USDT",
+      "price_decimals": 9,
+      "quantity_decimals": 0,
+      "min_price": 0.000000001,
+      "min_quantity": 1,
+      "note": "Bybit allows 9 decimals vs Binance's 8"
+    },
+    
+    "OKX:BTC/USDT": {
+      "symbol": "BTC/USDT",
+      "price_decimals": 1,
+      "quantity_decimals": 8,
+      "min_price": 0.1,
+      "min_quantity": 0.00000001,
+      "note": "OKX only allows 1 decimal for BTC price"
+    },
+    "OKX:SHIB/USDT": {
+      "symbol": "SHIB/USDT",
+      "price_decimals": 10,
+      "quantity_decimals": 0,
+      "min_price": 0.0000000001,
+      "min_quantity": 1,
+      "note": "OKX allows 10 decimals for SHIB"
+    },
+    
+    "Deribit:BTC-PERPETUAL": {
+      "symbol": "BTC-PERPETUAL",
+      "price_decimals": 1,
+      "quantity_decimals": 0,
+      "min_price": 0.1,
+      "min_quantity": 1,
+      "note": "Derivatives have different precision"
+    },
+    
+    "Bithumb:BTC/KRW": {
+      "symbol": "BTC/KRW",
+      "price_decimals": 0,
+      "quantity_decimals": 4,
+      "min_price": 1,
+      "min_quantity": 0.0001
+    }
+  },
+  
+  "exchange_defaults": {
+    "Binance": {
+      "USDT": 8,
+      "BUSD": 8,
+      "BTC": 8
+    },
+    "Upbit": {
+      "KRW": 0,
+      "USDT": 4,
+      "BTC": 8
+    },
+    "Coinbase": {
+      "USD": 2,
+      "EUR": 2,
+      "GBP": 2,
+      "USDT": 6
+    },
+    "Bybit": {
+      "USDT": 8,
+      "USD": 2
+    },
+    "OKX": {
+      "USDT": 8,
+      "USD": 2
+    }
+  }
+}

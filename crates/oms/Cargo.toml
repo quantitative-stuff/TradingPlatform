@@ -1,0 +1,10 @@
+[package]
+name = "oms"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+market-types = { path = "../market-types" }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }

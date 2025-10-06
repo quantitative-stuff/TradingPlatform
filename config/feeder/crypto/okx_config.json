@@ -1,0 +1,53 @@
+{
+  "connect_config": {
+    "futures_ws_url": "wss://ws.okx.com:8443/ws/v5/public",
+    "mainnet_url": "https://www.okx.com",
+    "testnet_url": "https://www.okx.com/api/v5/market",
+    "use_testnet": false,
+    "ws_url": "wss://ws.okx.com:8443/ws/v5/public",
+    "initial_retry_delay_secs": 5,
+    "max_retry_delay_secs": 300,
+    "connection_delay_ms": 1000
+  },
+  "feed_config": {
+    "asset_type": [
+      "spot",
+      "swap"
+    ],
+    "connection_timeout_seconds": 30,
+    "exchange": "okx",
+    "max_reconnect_attempts": 10,
+    "max_symbols_per_connection": 5,
+    "reconnect_delay_seconds": 5
+  },
+  "output_dir": "data/okx",
+  "statistics": {
+    "futures_usdt_count": 3,
+    "spot_usdt_count": 5,
+    "total_futures_available": 283,
+    "total_spot_available": 685
+  },
+  "subscribe_data": {
+    "spot_symbols": [
+      "BTC-USDT",
+      "ETH-USDT",
+      "SOL-USDT",
+      "XRP-USDT",
+      "ADA-USDT"
+    ],
+    "futures_symbols": [
+      "BTC-USDT-SWAP",
+      "ETH-USDT-SWAP",
+      "SOL-USDT-SWAP"
+    ],
+    "stream_type": [
+      "trades",
+      "books50-l2-tbt"
+    ],
+    "order_depth": 50
+  },
+  "rate_limits": {
+    "requests_per_second": 20,
+    "websocket_connections_max": 20
+  }
+}

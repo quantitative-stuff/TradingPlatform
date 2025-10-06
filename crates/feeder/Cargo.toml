@@ -1,0 +1,72 @@
+[package]
+name = "feeder"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+# Internal workspace dependencies
+market-types = { path = "../market-types" }
+udp-protocol = { path = "../udp-protocol" }
+database = { path = "../database" }
+
+# Core async runtime and networking
+tokio = { workspace = true }
+tokio-tungstenite = { workspace = true }
+futures-util = "0.3"
+futures = "0.3"
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+simd-json = "0.13"
+serde_urlencoded = "0.7.0"
+
+# Error handling
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+
+# Logging and tracing
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+# Time and networking
+chrono = { workspace = true }
+reqwest = { version = "0.12.12", features = ["json", "native-tls", "blocking"] }
+
+# Utilities
+async-trait = { workspace = true }
+uuid = { workspace = true }
+once_cell = { workspace = true }
+parking_lot = { workspace = true }
+rand = "0.8"
+ctrlc = "3.4"
+
+# Crypto and auth
+hex = "0.4.3"
+hmac = "0.12"
+sha2 = "0.10"
+base64 = "0.22"
+crc32fast = "1.3"
+
+# Configuration
+config = { workspace = true }
+toml = "0.5"
+dotenv = "0.15"
+clap = { version = "4.0", features = ["derive"] }
+colored = "2.0"
+ratatui = "0.26"
+crossterm = "0.27"
+
+# System info (for monitoring)
+sysinfo = "0.30"
+
+# Socket configuration
+socket2 = { workspace = true }
+hostname = "0.3"
+
+# Database dependencies
+questdb = "0.1"
+kdb = "0.3.0"
+
+# Required for some modules
+lazy_static = "1.4"

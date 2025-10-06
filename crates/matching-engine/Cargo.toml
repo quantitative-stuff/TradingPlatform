@@ -1,0 +1,13 @@
+[package]
+name = "matching-engine"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+market-types = { path = "../market-types" }
+anyhow = { workspace = true }
+dashmap = { workspace = true }
+parking_lot = { workspace = true }
+tracing = { workspace = true }
+serde = { workspace = true }
+chrono = { workspace = true }

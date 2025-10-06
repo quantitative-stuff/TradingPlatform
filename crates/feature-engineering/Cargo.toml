@@ -1,0 +1,14 @@
+[package]
+name = "feature-engineering"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+market-types = { path = "../market-types" }
+matching-engine = { path = "../matching-engine" }
+anyhow = { workspace = true }
+ndarray = { workspace = true }
+ndarray-stats = { workspace = true }
+statrs = { workspace = true }
+chrono = { workspace = true }
+parking_lot = { workspace = true }

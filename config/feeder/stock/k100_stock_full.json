@@ -1,0 +1,4188 @@
+[
+
+    {
+        "basecode": "A005930",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": ["S3_", "H1_", "JH0", "JC0"],
+        "futures": {
+            "NEAR": {
+                "shcode": "111W1000",
+                "hname": "삼성전자 F 202401",
+                "expcode": "KR4111W10004"
+            },
+            "NEXT": {
+                "shcode": "111W2000",
+                "hname": "삼성전자 F 202402",
+                "expcode": "KR4111W20003"
+            },
+            "FAR": {
+                "shcode": "111W3000",
+                "hname": "삼성전자 F 202403",
+                "expcode": "KR4111W30002"
+            }
+        }
+    },
+
+
+
+
+    
+    {
+        "basecode": "A454910",
+        "shcode": "10FW1000",
+        "hname": "두산로보틱 F 202501",
+        "expcode": "KR410FW10006",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A454910",
+        "shcode": "10FW2000",
+        "hname": "두산로보틱 F 202502",
+        "expcode": "KR410FW20005",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A454910",
+        "shcode": "10FW3000",
+        "hname": "두산로보틱 F 202503",
+        "expcode": "KR410FW30004",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A003230",
+        "shcode": "10KW1000",
+        "hname": "삼양식품   F 202501",
+        "expcode": "KR410KW10006",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A003230",
+        "shcode": "10KW2000",
+        "hname": "삼양식품   F 202502",
+        "expcode": "KR410KW20005",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A003230",
+        "shcode": "10KW3000",
+        "hname": "삼양식품   F 202503",
+        "expcode": "KR410KW30004",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A042700",
+        "shcode": "10ZW1000",
+        "hname": "한미반도체 F 202501",
+        "expcode": "KR410ZW10004",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A042700",
+        "shcode": "10ZW2000",
+        "hname": "한미반도체 F 202502",
+        "expcode": "KR410ZW20003",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A042700",
+        "shcode": "10ZW3000",
+        "hname": "한미반도체 F 202503",
+        "expcode": "KR410ZW30002",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A005930",
+        "shcode": "111W1000",
+        "hname": "삼성전자   F 202501",
+        "expcode": "KR4111W10004",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A005930",
+        "shcode": "111W2000",
+        "hname": "삼성전자   F 202502",
+        "expcode": "KR4111W20003",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A005930",
+        "shcode": "111W3000",
+        "hname": "삼성전자   F 202503",
+        "expcode": "KR4111W30002",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A017670",
+        "shcode": "112W1000",
+        "hname": "SK텔레콤   F 202501",
+        "expcode": "KR4112W10002",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A017670",
+        "shcode": "112W2000",
+        "hname": "SK텔레콤   F 202502",
+        "expcode": "KR4112W20001",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A017670",
+        "shcode": "112W3000",
+        "hname": "SK텔레콤   F 202503",
+        "expcode": "KR4112W30000",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A005490",
+        "shcode": "113W1000",
+        "hname": "POSCO 홀딩 F 202501",
+        "expcode": "KR4113W10000",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A005490",
+        "shcode": "113W2000",
+        "hname": "POSCO 홀딩 F 202502",
+        "expcode": "KR4113W20009",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A005490",
+        "shcode": "113W3000",
+        "hname": "POSCO 홀딩 F 202503",
+        "expcode": "KR4113W30008",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A030200",
+        "shcode": "114W1000",
+        "hname": "KT         F 202501",
+        "expcode": "KR4114W10008",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A030200",
+        "shcode": "114W2000",
+        "hname": "KT         F 202502",
+        "expcode": "KR4114W20007",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A030200",
+        "shcode": "114W3000",
+        "hname": "KT         F 202503",
+        "expcode": "KR4114W30006",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A015760",
+        "shcode": "115W1000",
+        "hname": "한국전력   F 202501",
+        "expcode": "KR4115W10005",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A015760",
+        "shcode": "115W2000",
+        "hname": "한국전력   F 202502",
+        "expcode": "KR4115W20004",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A015760",
+        "shcode": "115W3000",
+        "hname": "한국전력   F 202503",
+        "expcode": "KR4115W30003",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A005380",
+        "shcode": "116W1000",
+        "hname": "현대차     F 202501",
+        "expcode": "KR4116W10003",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A005380",
+        "shcode": "116W2000",
+        "hname": "현대차     F 202502",
+        "expcode": "KR4116W20002",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A005380",
+        "shcode": "116W3000",
+        "hname": "현대차     F 202503",
+        "expcode": "KR4116W30001",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A016360",
+        "shcode": "117W1000",
+        "hname": "삼성증권   F 202501",
+        "expcode": "KR4117W10001",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A016360",
+        "shcode": "117W2000",
+        "hname": "삼성증권   F 202502",
+        "expcode": "KR4117W20000",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A016360",
+        "shcode": "117W3000",
+        "hname": "삼성증권   F 202503",
+        "expcode": "KR4117W30009",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A055550",
+        "shcode": "118W1000",
+        "hname": "신한지주   F 202501",
+        "expcode": "KR4118W10009",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A055550",
+        "shcode": "118W2000",
+        "hname": "신한지주   F 202502",
+        "expcode": "KR4118W20008",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A055550",
+        "shcode": "118W3000",
+        "hname": "신한지주   F 202503",
+        "expcode": "KR4118W30007",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A000270",
+        "shcode": "119W1000",
+        "hname": "기아       F 202501",
+        "expcode": "KR4119W10007",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A000270",
+        "shcode": "119W2000",
+        "hname": "기아       F 202502",
+        "expcode": "KR4119W20006",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A000270",
+        "shcode": "119W3000",
+        "hname": "기아       F 202503",
+        "expcode": "KR4119W30005",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A012330",
+        "shcode": "120W1000",
+        "hname": "현대모비스 F 202501",
+        "expcode": "KR4120W10005",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A012330",
+        "shcode": "120W2000",
+        "hname": "현대모비스 F 202502",
+        "expcode": "KR4120W20004",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A012330",
+        "shcode": "120W3000",
+        "hname": "현대모비스 F 202503",
+        "expcode": "KR4120W30003",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A006400",
+        "shcode": "122W1000",
+        "hname": "삼성SDI    F 202501",
+        "expcode": "KR4122W10001",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A006400",
+        "shcode": "122W2000",
+        "hname": "삼성SDI    F 202502",
+        "expcode": "KR4122W20000",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A006400",
+        "shcode": "122W3000",
+        "hname": "삼성SDI    F 202503",
+        "expcode": "KR4122W30009",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A009150",
+        "shcode": "123W1000",
+        "hname": "삼성전기   F 202501",
+        "expcode": "KR4123W10009",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A009150",
+        "shcode": "123W2000",
+        "hname": "삼성전기   F 202502",
+        "expcode": "KR4123W20008",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A009150",
+        "shcode": "123W3000",
+        "hname": "삼성전기   F 202503",
+        "expcode": "KR4123W30007",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A066570",
+        "shcode": "124W1000",
+        "hname": "LG전자     F 202501",
+        "expcode": "KR4124W10007",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A066570",
+        "shcode": "124W2000",
+        "hname": "LG전자     F 202502",
+        "expcode": "KR4124W20006",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A066570",
+        "shcode": "124W3000",
+        "hname": "LG전자     F 202503",
+        "expcode": "KR4124W30005",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A036460",
+        "shcode": "128W1000",
+        "hname": "한국가스   F 202501",
+        "expcode": "KR4128W10008",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A036460",
+        "shcode": "128W2000",
+        "hname": "한국가스   F 202502",
+        "expcode": "KR4128W20007",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A036460",
+        "shcode": "128W3000",
+        "hname": "한국가스   F 202503",
+        "expcode": "KR4128W30006",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A004020",
+        "shcode": "132W1000",
+        "hname": "현대제철   F 202501",
+        "expcode": "KR4132W10000",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A004020",
+        "shcode": "132W2000",
+        "hname": "현대제철   F 202502",
+        "expcode": "KR4132W20009",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A004020",
+        "shcode": "132W3000",
+        "hname": "현대제철   F 202503",
+        "expcode": "KR4132W30008",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A003550",
+        "shcode": "134W1000",
+        "hname": "LG         F 202501",
+        "expcode": "KR4134W10006",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A003550",
+        "shcode": "134W2000",
+        "hname": "LG         F 202502",
+        "expcode": "KR4134W20005",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A003550",
+        "shcode": "134W3000",
+        "hname": "LG         F 202503",
+        "expcode": "KR4134W30004",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A078930",
+        "shcode": "135W1000",
+        "hname": "GS         F 202501",
+        "expcode": "KR4135W10003",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A078930",
+        "shcode": "135W2000",
+        "hname": "GS         F 202502",
+        "expcode": "KR4135W20002",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A078930",
+        "shcode": "135W3000",
+        "hname": "GS         F 202503",
+        "expcode": "KR4135W30001",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A033780",
+        "shcode": "136W1000",
+        "hname": "케이티앤지 F 202501",
+        "expcode": "KR4136W10001",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A033780",
+        "shcode": "136W2000",
+        "hname": "케이티앤지 F 202502",
+        "expcode": "KR4136W20000",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A033780",
+        "shcode": "136W3000",
+        "hname": "케이티앤지 F 202503",
+        "expcode": "KR4136W30009",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A009540",
+        "shcode": "139W1000",
+        "hname": "HD한국조선 F 202501",
+        "expcode": "KR4139W10005",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A009540",
+        "shcode": "139W2000",
+        "hname": "HD한국조선 F 202502",
+        "expcode": "KR4139W20004",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A009540",
+        "shcode": "139W3000",
+        "hname": "HD한국조선 F 202503",
+        "expcode": "KR4139W30003",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A086790",
+        "shcode": "140W1000",
+        "hname": "하나금융지 F 202501",
+        "expcode": "KR4140W10003",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A086790",
+        "shcode": "140W2000",
+        "hname": "하나금융지 F 202502",
+        "expcode": "KR4140W20002",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A086790",
+        "shcode": "140W3000",
+        "hname": "하나금융지 F 202503",
+        "expcode": "KR4140W30001",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A096770",
+        "shcode": "141W1000",
+        "hname": "SK이노베이 F 202501",
+        "expcode": "KR4141W10001",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A096770",
+        "shcode": "141W2000",
+        "hname": "SK이노베이 F 202502",
+        "expcode": "KR4141W20000",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A096770",
+        "shcode": "141W3000",
+        "hname": "SK이노베이 F 202503",
+        "expcode": "KR4141W30009",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A034220",
+        "shcode": "145W1000",
+        "hname": "LG디스플레 F 202501",
+        "expcode": "KR4145W10002",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A034220",
+        "shcode": "145W2000",
+        "hname": "LG디스플레 F 202502",
+        "expcode": "KR4145W20001",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A034220",
+        "shcode": "145W3000",
+        "hname": "LG디스플레 F 202503",
+        "expcode": "KR4145W30000",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A105560",
+        "shcode": "146W1000",
+        "hname": "KB금융     F 202501",
+        "expcode": "KR4146W10000",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A105560",
+        "shcode": "146W2000",
+        "hname": "KB금융     F 202502",
+        "expcode": "KR4146W20009",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A105560",
+        "shcode": "146W3000",
+        "hname": "KB금융     F 202503",
+        "expcode": "KR4146W30008",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A051910",
+        "shcode": "147W1000",
+        "hname": "LG화학     F 202501",
+        "expcode": "KR4147W10008",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A051910",
+        "shcode": "147W2000",
+        "hname": "LG화학     F 202502",
+        "expcode": "KR4147W20007",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A051910",
+        "shcode": "147W3000",
+        "hname": "LG화학     F 202503",
+        "expcode": "KR4147W30006",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A006800",
+        "shcode": "148W1000",
+        "hname": "미래에셋증 F 202501",
+        "expcode": "KR4148W10006",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A006800",
+        "shcode": "148W2000",
+        "hname": "미래에셋증 F 202502",
+        "expcode": "KR4148W20005",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A006800",
+        "shcode": "148W3000",
+        "hname": "미래에셋증 F 202503",
+        "expcode": "KR4148W30004",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A000660",
+        "shcode": "150W1000",
+        "hname": "SK하이닉스 F 202501",
+        "expcode": "KR4150W10002",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A000660",
+        "shcode": "150W2000",
+        "hname": "SK하이닉스 F 202502",
+        "expcode": "KR4150W20001",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A000660",
+        "shcode": "150W3000",
+        "hname": "SK하이닉스 F 202503",
+        "expcode": "KR4150W30000",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A161390",
+        "shcode": "155W1000",
+        "hname": "한국타이어 F 202501",
+        "expcode": "KR4155W10001",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A161390",
+        "shcode": "155W2000",
+        "hname": "한국타이어 F 202502",
+        "expcode": "KR4155W20000",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A161390",
+        "shcode": "155W3000",
+        "hname": "한국타이어 F 202503",
+        "expcode": "KR4155W30009",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A035420",
+        "shcode": "156W1000",
+        "hname": "NAVER      F 202501",
+        "expcode": "KR4156W10009",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A035420",
+        "shcode": "156W2000",
+        "hname": "NAVER      F 202502",
+        "expcode": "KR4156W20008",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A035420",
+        "shcode": "156W3000",
+        "hname": "NAVER      F 202503",
+        "expcode": "KR4156W30007",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A003490",
+        "shcode": "157W1000",
+        "hname": "대한항공   F 202501",
+        "expcode": "KR4157W10007",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A003490",
+        "shcode": "157W2000",
+        "hname": "대한항공   F 202502",
+        "expcode": "KR4157W20006",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A003490",
+        "shcode": "157W3000",
+        "hname": "대한항공   F 202503",
+        "expcode": "KR4157W30005",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A032640",
+        "shcode": "1B0W1000",
+        "hname": "LG유플러스 F 202501",
+        "expcode": "KR41B0W10005",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A032640",
+        "shcode": "1B0W2000",
+        "hname": "LG유플러스 F 202502",
+        "expcode": "KR41B0W20004",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A032640",
+        "shcode": "1B0W3000",
+        "hname": "LG유플러스 F 202503",
+        "expcode": "KR41B0W30003",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A010950",
+        "shcode": "1B2W1000",
+        "hname": "S-Oil      F 202501",
+        "expcode": "KR41B2W10001",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A010950",
+        "shcode": "1B2W2000",
+        "hname": "S-Oil      F 202502",
+        "expcode": "KR41B2W20000",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A010950",
+        "shcode": "1B2W3000",
+        "hname": "S-Oil      F 202503",
+        "expcode": "KR41B2W30009",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A010130",
+        "shcode": "1B3W1000",
+        "hname": "고려아연   F 202501",
+        "expcode": "KR41B3W10009",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A010130",
+        "shcode": "1B3W2000",
+        "hname": "고려아연   F 202502",
+        "expcode": "KR41B3W20008",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A010130",
+        "shcode": "1B3W3000",
+        "hname": "고려아연   F 202503",
+        "expcode": "KR41B3W30007",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A024110",
+        "shcode": "1B4W1000",
+        "hname": "기업은행   F 202501",
+        "expcode": "KR41B4W10007",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A024110",
+        "shcode": "1B4W2000",
+        "hname": "기업은행   F 202502",
+        "expcode": "KR41B4W20006",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A024110",
+        "shcode": "1B4W3000",
+        "hname": "기업은행   F 202503",
+        "expcode": "KR41B4W30005",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A047050",
+        "shcode": "1B7W1000",
+        "hname": "포스코인터 F 202501",
+        "expcode": "KR41B7W10000",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A047050",
+        "shcode": "1B7W2000",
+        "hname": "포스코인터 F 202502",
+        "expcode": "KR41B7W20009",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A047050",
+        "shcode": "1B7W3000",
+        "hname": "포스코인터 F 202503",
+        "expcode": "KR41B7W30008",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A034020",
+        "shcode": "1B9W1000",
+        "hname": "두산에너빌 F 202501",
+        "expcode": "KR41B9W10006",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A034020",
+        "shcode": "1B9W2000",
+        "hname": "두산에너빌 F 202502",
+        "expcode": "KR41B9W20005",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A034020",
+        "shcode": "1B9W3000",
+        "hname": "두산에너빌 F 202503",
+        "expcode": "KR41B9W30004",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A032830",
+        "shcode": "1BDW1000",
+        "hname": "삼성생명   F 202501",
+        "expcode": "KR41BDW10007",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A032830",
+        "shcode": "1BDW2000",
+        "hname": "삼성생명   F 202502",
+        "expcode": "KR41BDW20006",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A032830",
+        "shcode": "1BDW3000",
+        "hname": "삼성생명   F 202503",
+        "expcode": "KR41BDW30005",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A010140",
+        "shcode": "1BFW1000",
+        "hname": "삼성중공업 F 202501",
+        "expcode": "KR41BFW10002",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A010140",
+        "shcode": "1BFW2000",
+        "hname": "삼성중공업 F 202502",
+        "expcode": "KR41BFW20001",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A010140",
+        "shcode": "1BFW3000",
+        "hname": "삼성중공업 F 202503",
+        "expcode": "KR41BFW30000",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A029780",
+        "shcode": "1BGW1000",
+        "hname": "삼성카드   F 202501",
+        "expcode": "KR41BGW10000",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A029780",
+        "shcode": "1BGW2000",
+        "hname": "삼성카드   F 202502",
+        "expcode": "KR41BGW20009",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A029780",
+        "shcode": "1BGW3000",
+        "hname": "삼성카드   F 202503",
+        "expcode": "KR41BGW30008",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A012450",
+        "shcode": "1BHW1000",
+        "hname": "한화에어로 F 202501",
+        "expcode": "KR41BHW10008",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A012450",
+        "shcode": "1BHW2000",
+        "hname": "한화에어로 F 202502",
+        "expcode": "KR41BHW20007",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A012450",
+        "shcode": "1BHW3000",
+        "hname": "한화에어로 F 202503",
+        "expcode": "KR41BHW30006",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A036570",
+        "shcode": "1BJW1000",
+        "hname": "엔씨소프트 F 202501",
+        "expcode": "KR41BJW10004",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A036570",
+        "shcode": "1BJW2000",
+        "hname": "엔씨소프트 F 202502",
+        "expcode": "KR41BJW20003",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A036570",
+        "shcode": "1BJW3000",
+        "hname": "엔씨소프트 F 202503",
+        "expcode": "KR41BJW30002",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A071050",
+        "shcode": "1BLW1000",
+        "hname": "한국금융지 F 202501",
+        "expcode": "KR41BLW10000",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A071050",
+        "shcode": "1BLW2000",
+        "hname": "한국금융지 F 202502",
+        "expcode": "KR41BLW20009",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A071050",
+        "shcode": "1BLW3000",
+        "hname": "한국금융지 F 202503",
+        "expcode": "KR41BLW30008",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A047810",
+        "shcode": "1BMW1000",
+        "hname": "한국항공우 F 202501",
+        "expcode": "KR41BMW10008",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A047810",
+        "shcode": "1BMW2000",
+        "hname": "한국항공우 F 202502",
+        "expcode": "KR41BMW20007",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A047810",
+        "shcode": "1BMW3000",
+        "hname": "한국항공우 F 202503",
+        "expcode": "KR41BMW30006",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A035250",
+        "shcode": "1BSW1000",
+        "hname": "강원랜드   F 202501",
+        "expcode": "KR41BSW10005",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A035250",
+        "shcode": "1BSW2000",
+        "hname": "강원랜드   F 202502",
+        "expcode": "KR41BSW20004",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A035250",
+        "shcode": "1BSW3000",
+        "hname": "강원랜드   F 202503",
+        "expcode": "KR41BSW30003",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A138930",
+        "shcode": "1BTW1000",
+        "hname": "BNK금융지  F 202501",
+        "expcode": "KR41BTW10003",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A138930",
+        "shcode": "1BTW2000",
+        "hname": "BNK금융지  F 202502",
+        "expcode": "KR41BTW20002",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A138930",
+        "shcode": "1BTW3000",
+        "hname": "BNK금융지  F 202503",
+        "expcode": "KR41BTW30001",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A011070",
+        "shcode": "1BYW1000",
+        "hname": "LG이노텍   F 202501",
+        "expcode": "KR41BYW10003",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A011070",
+        "shcode": "1BYW2000",
+        "hname": "LG이노텍   F 202502",
+        "expcode": "KR41BYW20002",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A011070",
+        "shcode": "1BYW3000",
+        "hname": "LG이노텍   F 202503",
+        "expcode": "KR41BYW30001",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A005940",
+        "shcode": "1BZW1000",
+        "hname": "NH투자증권 F 202501",
+        "expcode": "KR41BZW10000",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A005940",
+        "shcode": "1BZW2000",
+        "hname": "NH투자증권 F 202502",
+        "expcode": "KR41BZW20009",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A005940",
+        "shcode": "1BZW3000",
+        "hname": "NH투자증권 F 202503",
+        "expcode": "KR41BZW30008",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A034730",
+        "shcode": "1C1W1000",
+        "hname": "SK         F 202501",
+        "expcode": "KR41C1W10002",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A034730",
+        "shcode": "1C1W2000",
+        "hname": "SK         F 202502",
+        "expcode": "KR41C1W20001",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A034730",
+        "shcode": "1C1W3000",
+        "hname": "SK         F 202503",
+        "expcode": "KR41C1W30000",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A018260",
+        "shcode": "1C5W1000",
+        "hname": "삼성SDS    F 202501",
+        "expcode": "KR41C5W10003",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A018260",
+        "shcode": "1C5W2000",
+        "hname": "삼성SDS    F 202502",
+        "expcode": "KR41C5W20002",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A018260",
+        "shcode": "1C5W3000",
+        "hname": "삼성SDS    F 202503",
+        "expcode": "KR41C5W30001",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A090430",
+        "shcode": "1C6W1000",
+        "hname": "아모레퍼시 F 202501",
+        "expcode": "KR41C6W10001",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A090430",
+        "shcode": "1C6W2000",
+        "hname": "아모레퍼시 F 202502",
+        "expcode": "KR41C6W20000",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A090430",
+        "shcode": "1C6W3000",
+        "hname": "아모레퍼시 F 202503",
+        "expcode": "KR41C6W30009",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A028260",
+        "shcode": "1C8W1000",
+        "hname": "삼성물산   F 202501",
+        "expcode": "KR41C8W10007",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A028260",
+        "shcode": "1C8W2000",
+        "hname": "삼성물산   F 202502",
+        "expcode": "KR41C8W20006",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A028260",
+        "shcode": "1C8W3000",
+        "hname": "삼성물산   F 202503",
+        "expcode": "KR41C8W30005",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A086280",
+        "shcode": "1CCW1000",
+        "hname": "현대글로비 F 202501",
+        "expcode": "KR41CCW10007",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A086280",
+        "shcode": "1CCW2000",
+        "hname": "현대글로비 F 202502",
+        "expcode": "KR41CCW20006",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A086280",
+        "shcode": "1CCW3000",
+        "hname": "현대글로비 F 202503",
+        "expcode": "KR41CCW30005",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A010620",
+        "shcode": "1CDW1000",
+        "hname": "HD현대미포 F 202501",
+        "expcode": "KR41CDW10005",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A010620",
+        "shcode": "1CDW2000",
+        "hname": "HD현대미포 F 202502",
+        "expcode": "KR41CDW20004",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A010620",
+        "shcode": "1CDW3000",
+        "hname": "HD현대미포 F 202503",
+        "expcode": "KR41CDW30003",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A035720",
+        "shcode": "1CFW1000",
+        "hname": "카카오     F 202501",
+        "expcode": "KR41CFW10000",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A035720",
+        "shcode": "1CFW2000",
+        "hname": "카카오     F 202502",
+        "expcode": "KR41CFW20009",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A035720",
+        "shcode": "1CFW3000",
+        "hname": "카카오     F 202503",
+        "expcode": "KR41CFW30008",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A022100",
+        "shcode": "1CNW1000",
+        "hname": "포스코DX   F 202501",
+        "expcode": "KR41CNW10004",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A022100",
+        "shcode": "1CNW2000",
+        "hname": "포스코DX   F 202502",
+        "expcode": "KR41CNW20003",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A022100",
+        "shcode": "1CNW3000",
+        "hname": "포스코DX   F 202503",
+        "expcode": "KR41CNW30002",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A068270",
+        "shcode": "1CPW1000",
+        "hname": "셀트리온   F 202501",
+        "expcode": "KR41CPW10009",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A068270",
+        "shcode": "1CPW2000",
+        "hname": "셀트리온   F 202502",
+        "expcode": "KR41CPW20008",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A068270",
+        "shcode": "1CPW3000",
+        "hname": "셀트리온   F 202503",
+        "expcode": "KR41CPW30007",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A051900",
+        "shcode": "1CRW1000",
+        "hname": "LG생활건강 F 202501",
+        "expcode": "KR41CRW10005",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A051900",
+        "shcode": "1CRW2000",
+        "hname": "LG생활건강 F 202502",
+        "expcode": "KR41CRW20004",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A051900",
+        "shcode": "1CRW3000",
+        "hname": "LG생활건강 F 202503",
+        "expcode": "KR41CRW30003",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A000810",
+        "shcode": "1CTW1000",
+        "hname": "삼성화재   F 202501",
+        "expcode": "KR41CTW10001",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A000810",
+        "shcode": "1CTW2000",
+        "hname": "삼성화재   F 202502",
+        "expcode": "KR41CTW20000",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A000810",
+        "shcode": "1CTW3000",
+        "hname": "삼성화재   F 202503",
+        "expcode": "KR41CTW30009",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A021240",
+        "shcode": "1CWW1000",
+        "hname": "코웨이     F 202501",
+        "expcode": "KR41CWW10005",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A021240",
+        "shcode": "1CWW2000",
+        "hname": "코웨이     F 202502",
+        "expcode": "KR41CWW20004",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A021240",
+        "shcode": "1CWW3000",
+        "hname": "코웨이     F 202503",
+        "expcode": "KR41CWW30003",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A128940",
+        "shcode": "1CXW1000",
+        "hname": "한미약품   F 202501",
+        "expcode": "KR41CXW10003",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A128940",
+        "shcode": "1CXW2000",
+        "hname": "한미약품   F 202502",
+        "expcode": "KR41CXW20002",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A128940",
+        "shcode": "1CXW3000",
+        "hname": "한미약품   F 202503",
+        "expcode": "KR41CXW30001",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A005830",
+        "shcode": "1D0W1000",
+        "hname": "DB손해보험 F 202501",
+        "expcode": "KR41D0W10003",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A005830",
+        "shcode": "1D0W2000",
+        "hname": "DB손해보험 F 202502",
+        "expcode": "KR41D0W20002",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A005830",
+        "shcode": "1D0W3000",
+        "hname": "DB손해보험 F 202503",
+        "expcode": "KR41D0W30001",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A097950",
+        "shcode": "1D1W1000",
+        "hname": "CJ제일제당 F 202501",
+        "expcode": "KR41D1W10001",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A097950",
+        "shcode": "1D1W2000",
+        "hname": "CJ제일제당 F 202502",
+        "expcode": "KR41D1W20000",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A097950",
+        "shcode": "1D1W3000",
+        "hname": "CJ제일제당 F 202503",
+        "expcode": "KR41D1W30009",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A000100",
+        "shcode": "1D6W1000",
+        "hname": "유한양행   F 202501",
+        "expcode": "KR41D6W10000",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A000100",
+        "shcode": "1D6W2000",
+        "hname": "유한양행   F 202502",
+        "expcode": "KR41D6W20009",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A000100",
+        "shcode": "1D6W3000",
+        "hname": "유한양행   F 202503",
+        "expcode": "KR41D6W30008",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A079550",
+        "shcode": "1DBW1000",
+        "hname": "LIG넥스원  F 202501",
+        "expcode": "KR41DBW10007",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A079550",
+        "shcode": "1DBW2000",
+        "hname": "LIG넥스원  F 202502",
+        "expcode": "KR41DBW20006",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A079550",
+        "shcode": "1DBW3000",
+        "hname": "LIG넥스원  F 202503",
+        "expcode": "KR41DBW30005",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A241560",
+        "shcode": "1DWW1000",
+        "hname": "두산밥캣   F 202501",
+        "expcode": "KR41DWW10003",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A241560",
+        "shcode": "1DWW2000",
+        "hname": "두산밥캣   F 202502",
+        "expcode": "KR41DWW20002",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A241560",
+        "shcode": "1DWW3000",
+        "hname": "두산밥캣   F 202503",
+        "expcode": "KR41DWW30001",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A251270",
+        "shcode": "1E5W1000",
+        "hname": "넷마블     F 202501",
+        "expcode": "KR41E5W10001",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A251270",
+        "shcode": "1E5W2000",
+        "hname": "넷마블     F 202502",
+        "expcode": "KR41E5W20000",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A251270",
+        "shcode": "1E5W3000",
+        "hname": "넷마블     F 202503",
+        "expcode": "KR41E5W30009",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A003670",
+        "shcode": "1E8W1000",
+        "hname": "포스코퓨처 F 202501",
+        "expcode": "KR41E8W10005",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A003670",
+        "shcode": "1E8W2000",
+        "hname": "포스코퓨처 F 202502",
+        "expcode": "KR41E8W20004",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A003670",
+        "shcode": "1E8W3000",
+        "hname": "포스코퓨처 F 202503",
+        "expcode": "KR41E8W30003",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A316140",
+        "shcode": "1EBW1000",
+        "hname": "우리금융지 F 202501",
+        "expcode": "KR41EBW10005",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A316140",
+        "shcode": "1EBW2000",
+        "hname": "우리금융지 F 202502",
+        "expcode": "KR41EBW20004",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A316140",
+        "shcode": "1EBW3000",
+        "hname": "우리금융지 F 202503",
+        "expcode": "KR41EBW30003",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A011790",
+        "shcode": "1EJW1000",
+        "hname": "SKC        F 202501",
+        "expcode": "KR41EJW10008",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A011790",
+        "shcode": "1EJW2000",
+        "hname": "SKC        F 202502",
+        "expcode": "KR41EJW20007",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A011790",
+        "shcode": "1EJW3000",
+        "hname": "SKC        F 202503",
+        "expcode": "KR41EJW30006",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A207940",
+        "shcode": "1ESW1000",
+        "hname": "삼성바이오 F 202501",
+        "expcode": "KR41ESW10009",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A207940",
+        "shcode": "1ESW2000",
+        "hname": "삼성바이오 F 202502",
+        "expcode": "KR41ESW20008",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A207940",
+        "shcode": "1ESW3000",
+        "hname": "삼성바이오 F 202503",
+        "expcode": "KR41ESW30007",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A028050",
+        "shcode": "1ETW1000",
+        "hname": "삼성E&A    F 202501",
+        "expcode": "KR41ETW10007",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A028050",
+        "shcode": "1ETW2000",
+        "hname": "삼성E&A    F 202502",
+        "expcode": "KR41ETW20006",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A028050",
+        "shcode": "1ETW3000",
+        "hname": "삼성E&A    F 202503",
+        "expcode": "KR41ETW30005",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A272210",
+        "shcode": "1EVW1000",
+        "hname": "한화시스템 F 202501",
+        "expcode": "KR41EVW10003",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A272210",
+        "shcode": "1EVW2000",
+        "hname": "한화시스템 F 202502",
+        "expcode": "KR41EVW20002",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A272210",
+        "shcode": "1EVW3000",
+        "hname": "한화시스템 F 202503",
+        "expcode": "KR41EVW30001",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A373220",
+        "shcode": "1F5W1000",
+        "hname": "LG에너지솔 F 202501",
+        "expcode": "KR41F5W10000",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A373220",
+        "shcode": "1F5W2000",
+        "hname": "LG에너지솔 F 202502",
+        "expcode": "KR41F5W20009",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A373220",
+        "shcode": "1F5W3000",
+        "hname": "LG에너지솔 F 202503",
+        "expcode": "KR41F5W30008",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A323410",
+        "shcode": "1F6W1000",
+        "hname": "카카오뱅크 F 202501",
+        "expcode": "KR41F6W10008",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A323410",
+        "shcode": "1F6W2000",
+        "hname": "카카오뱅크 F 202502",
+        "expcode": "KR41F6W20007",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A323410",
+        "shcode": "1F6W3000",
+        "hname": "카카오뱅크 F 202503",
+        "expcode": "KR41F6W30006",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A377300",
+        "shcode": "1F7W1000",
+        "hname": "카카오페이 F 202501",
+        "expcode": "KR41F7W10006",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A377300",
+        "shcode": "1F7W2000",
+        "hname": "카카오페이 F 202502",
+        "expcode": "KR41F7W20005",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A377300",
+        "shcode": "1F7W3000",
+        "hname": "카카오페이 F 202503",
+        "expcode": "KR41F7W30004",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A259960",
+        "shcode": "1F8W1000",
+        "hname": "크래프톤   F 202501",
+        "expcode": "KR41F8W10004",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A259960",
+        "shcode": "1F8W2000",
+        "hname": "크래프톤   F 202502",
+        "expcode": "KR41F8W20003",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A259960",
+        "shcode": "1F8W3000",
+        "hname": "크래프톤   F 202503",
+        "expcode": "KR41F8W30002",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A302440",
+        "shcode": "1F9W1000",
+        "hname": "SK바이오사 F 202501",
+        "expcode": "KR41F9W10002",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A302440",
+        "shcode": "1F9W2000",
+        "hname": "SK바이오사 F 202502",
+        "expcode": "KR41F9W20001",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A302440",
+        "shcode": "1F9W3000",
+        "hname": "SK바이오사 F 202503",
+        "expcode": "KR41F9W30000",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A011200",
+        "shcode": "1FAW1000",
+        "hname": "HMM        F 202501",
+        "expcode": "KR41FAW10004",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A011200",
+        "shcode": "1FAW2000",
+        "hname": "HMM        F 202502",
+        "expcode": "KR41FAW20003",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A011200",
+        "shcode": "1FAW3000",
+        "hname": "HMM        F 202503",
+        "expcode": "KR41FAW30002",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A352820",
+        "shcode": "1FCW1000",
+        "hname": "하이브     F 202501",
+        "expcode": "KR41FCW10000",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A352820",
+        "shcode": "1FCW2000",
+        "hname": "하이브     F 202502",
+        "expcode": "KR41FCW20009",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A352820",
+        "shcode": "1FCW3000",
+        "hname": "하이브     F 202503",
+        "expcode": "KR41FCW30008",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A329180",
+        "shcode": "1FDW1000",
+        "hname": "HD현대중공 F 202501",
+        "expcode": "KR41FDW10008",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A329180",
+        "shcode": "1FDW2000",
+        "hname": "HD현대중공 F 202502",
+        "expcode": "KR41FDW20007",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A329180",
+        "shcode": "1FDW3000",
+        "hname": "HD현대중공 F 202503",
+        "expcode": "KR41FDW30006",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A402340",
+        "shcode": "1FEW1000",
+        "hname": "SK스퀘어   F 202501",
+        "expcode": "KR41FEW10006",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A402340",
+        "shcode": "1FEW2000",
+        "hname": "SK스퀘어   F 202502",
+        "expcode": "KR41FEW20005",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A402340",
+        "shcode": "1FEW3000",
+        "hname": "SK스퀘어   F 202503",
+        "expcode": "KR41FEW30004",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A326030",
+        "shcode": "1FFW1000",
+        "hname": "SK바이오팜 F 202501",
+        "expcode": "KR41FFW10003",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A326030",
+        "shcode": "1FFW2000",
+        "hname": "SK바이오팜 F 202502",
+        "expcode": "KR41FFW20002",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A326030",
+        "shcode": "1FFW3000",
+        "hname": "SK바이오팜 F 202503",
+        "expcode": "KR41FFW30001",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A267250",
+        "shcode": "1FHW1000",
+        "hname": "HD현대     F 202501",
+        "expcode": "KR41FHW10009",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A267250",
+        "shcode": "1FHW2000",
+        "hname": "HD현대     F 202502",
+        "expcode": "KR41FHW20008",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A267250",
+        "shcode": "1FHW3000",
+        "hname": "HD현대     F 202503",
+        "expcode": "KR41FHW30007",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A271560",
+        "shcode": "1FJW1000",
+        "hname": "오리온     F 202501",
+        "expcode": "KR41FJW10005",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A271560",
+        "shcode": "1FJW2000",
+        "hname": "오리온     F 202502",
+        "expcode": "KR41FJW20004",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A271560",
+        "shcode": "1FJW3000",
+        "hname": "오리온     F 202503",
+        "expcode": "KR41FJW30003",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A138040",
+        "shcode": "1FKW1000",
+        "hname": "메리츠금융 F 202501",
+        "expcode": "KR41FKW10003",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A138040",
+        "shcode": "1FKW2000",
+        "hname": "메리츠금융 F 202502",
+        "expcode": "KR41FKW20002",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A138040",
+        "shcode": "1FKW3000",
+        "hname": "메리츠금융 F 202503",
+        "expcode": "KR41FKW30001",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A066970",
+        "shcode": "1FMW1000",
+        "hname": "엘앤에프   F 202501",
+        "expcode": "KR41FMW10009",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A066970",
+        "shcode": "1FMW2000",
+        "hname": "엘앤에프   F 202502",
+        "expcode": "KR41FMW20008",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A066970",
+        "shcode": "1FMW3000",
+        "hname": "엘앤에프   F 202503",
+        "expcode": "KR41FMW30007",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A006260",
+        "shcode": "1FSW1000",
+        "hname": "LS         F 202501",
+        "expcode": "KR41FSW10006",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A006260",
+        "shcode": "1FSW2000",
+        "hname": "LS         F 202502",
+        "expcode": "KR41FSW20005",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A006260",
+        "shcode": "1FSW3000",
+        "hname": "LS         F 202503",
+        "expcode": "KR41FSW30004",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A042660",
+        "shcode": "1FVW1000",
+        "hname": "한화오션   F 202501",
+        "expcode": "KR41FVW10000",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A042660",
+        "shcode": "1FVW2000",
+        "hname": "한화오션   F 202502",
+        "expcode": "KR41FVW20009",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A042660",
+        "shcode": "1FVW3000",
+        "hname": "한화오션   F 202503",
+        "expcode": "KR41FVW30008",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A026960",
+        "shcode": "1FXW1000",
+        "hname": "동서       F 202501",
+        "expcode": "KR41FXW10006",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A026960",
+        "shcode": "1FXW2000",
+        "hname": "동서       F 202502",
+        "expcode": "KR41FXW20005",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A026960",
+        "shcode": "1FXW3000",
+        "hname": "동서       F 202503",
+        "expcode": "KR41FXW30004",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A180640",
+        "shcode": "1G5W1000",
+        "hname": "한진칼     F 202501",
+        "expcode": "KR41G5W10009",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A180640",
+        "shcode": "1G5W2000",
+        "hname": "한진칼     F 202502",
+        "expcode": "KR41G5W20008",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A180640",
+        "shcode": "1G5W3000",
+        "hname": "한진칼     F 202503",
+        "expcode": "KR41G5W30007",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A064350",
+        "shcode": "1G6W1000",
+        "hname": "현대로템   F 202501",
+        "expcode": "KR41G6W10007",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A064350",
+        "shcode": "1G6W2000",
+        "hname": "현대로템   F 202502",
+        "expcode": "KR41G6W20006",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A064350",
+        "shcode": "1G6W3000",
+        "hname": "현대로템   F 202503",
+        "expcode": "KR41G6W30005",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A267260",
+        "shcode": "1GHW1000",
+        "hname": "HD현대일렉 F 202501",
+        "expcode": "KR41GHW10007",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A267260",
+        "shcode": "1GHW2000",
+        "hname": "HD현대일렉 F 202502",
+        "expcode": "KR41GHW20006",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A267260",
+        "shcode": "1GHW3000",
+        "hname": "HD현대일렉 F 202503",
+        "expcode": "KR41GHW30005",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A175330",
+        "shcode": "1GJW1000",
+        "hname": "JB금융지주 F 202501",
+        "expcode": "KR41GJW10003",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A175330",
+        "shcode": "1GJW2000",
+        "hname": "JB금융지주 F 202502",
+        "expcode": "KR41GJW20002",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A175330",
+        "shcode": "1GJW3000",
+        "hname": "JB금융지주 F 202503",
+        "expcode": "KR41GJW30001",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A010120",
+        "shcode": "1GLW1000",
+        "hname": "LS ELECTRI F 202501",
+        "expcode": "KR41GLW10009",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A010120",
+        "shcode": "1GLW2000",
+        "hname": "LS ELECTRI F 202502",
+        "expcode": "KR41GLW20008",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A010120",
+        "shcode": "1GLW3000",
+        "hname": "LS ELECTRI F 202503",
+        "expcode": "KR41GLW30007",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A000150",
+        "shcode": "1GTW1000",
+        "hname": "두산       F 202501",
+        "expcode": "KR41GTW10002",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A000150",
+        "shcode": "1GTW2000",
+        "hname": "두산       F 202502",
+        "expcode": "KR41GTW20001",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A000150",
+        "shcode": "1GTW3000",
+        "hname": "두산       F 202503",
+        "expcode": "KR41GTW30000",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A450080",
+        "shcode": "1GZW1000",
+        "hname": "에코프로머 F 202501",
+        "expcode": "KR41GZW10009",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A450080",
+        "shcode": "1GZW2000",
+        "hname": "에코프로머 F 202502",
+        "expcode": "KR41GZW20008",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A450080",
+        "shcode": "1GZW3000",
+        "hname": "에코프로머 F 202503",
+        "expcode": "KR41GZW30007",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A039490",
+        "shcode": "1HEW1000",
+        "hname": "키움증권   F 202501",
+        "expcode": "KR41HEW10002",
+        "monthly_future": "NEAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A039490",
+        "shcode": "1HEW2000",
+        "hname": "키움증권   F 202502",
+        "expcode": "KR41HEW20001",
+        "monthly_future": "NEXT-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    },
+    {
+        "basecode": "A039490",
+        "shcode": "1HEW3000",
+        "hname": "키움증권   F 202503",
+        "expcode": "KR41HEW30000",
+        "monthly_future": "FAR-Future",
+        "asset_type": "KOSPI_STOCK",
+        "tr_cd": [
+            "S3_",
+            "H1_",
+            "JH0",
+            "JC0"
+        ]
+    }
+]

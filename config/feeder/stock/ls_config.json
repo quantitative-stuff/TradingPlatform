@@ -1,0 +1,40 @@
+{
+    "credentials": {
+        "app_key": "PS5lH0u8jPeQCNoIKWGCORiK5BwrNFrK5osl",
+        "secret_key": "OefKITXw3Ic7zcsOHKkR3LadRHbstUY8"
+    },
+    "feed_config": {
+        "exchange": "LS",
+        "asset_type": ["spot", "future"],
+        "max_symbols_per_connection": 100,
+        "connection_timeout_seconds": 30,
+        "reconnect_delay_seconds": 5,
+        "max_reconnect_attempts": 10
+    },
+    "subscribe_data": {
+        "spot_symbols": [
+            "005930",
+            "000660",
+            "035420",
+            "035720",
+            "051910"
+        ],
+        "future_symbols": [
+            "101V6000",
+            "101VC000"
+        ],
+        "options_symbols": [],
+        "etf_symbols": [],
+        "elw_symbols": [],
+        "stream_type": ["trade", "orderbook"],
+        "level": 5
+    },
+    "connect_config": {
+        "base_url": "https://openapi.ls-sec.co.kr:8080",
+        "ws_url": "wss://openapi.ls-sec.co.kr:9443/websocket",
+        "connection_delay_ms": 100,
+        "max_connections": 10,
+        "max_retry_delay_secs": 300,
+        "initial_retry_delay_secs": 5
+    }
+}

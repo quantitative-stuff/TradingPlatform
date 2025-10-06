@@ -1,0 +1,42 @@
+[
+  {
+    "name": "Samsung Electronics",
+    "basecode": "A005930",
+    "futures": {
+      "NEAR": "101V3000",
+      "NEXT": "101V6000"
+    }
+  },
+  {
+    "name": "SK Hynix",
+    "basecode": "A000660",
+    "futures": {
+      "NEAR": "101V3000",
+      "NEXT": "101V6000"
+    }
+  },
+  {
+    "name": "Hyundai Motor",
+    "basecode": "A005380",
+    "futures": {
+      "NEAR": "101V3000",
+      "NEXT": "101V6000"
+    }
+  },
+  {
+    "name": "NAVER",
+    "basecode": "A035420",
+    "futures": {
+      "NEAR": "101V3000", 
+      "NEXT": "101V6000"
+    }
+  },
+  {
+    "name": "Kia",
+    "basecode": "A000270",
+    "futures": {
+      "NEAR": "101V3000",
+      "NEXT": "101V6000"
+    }
+  }
+]

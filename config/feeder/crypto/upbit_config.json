@@ -1,0 +1,31 @@
+{   
+    "output_dir": "data/upbit",
+    "feed_config":{
+        "exchange":"upbit",
+        "asset_type":["spot"]
+
+    },
+
+    "subscribe_data":{
+        "spot_symbols": [
+                "KRW-ETH",
+                "KRW-XRP",
+                "KRW-BTC",
+                "KRW-ETC"
+                ],
+        "futures_symbols": [],
+        "stream_type": ["orderbook", "trade"],
+        "order_depth": 50
+    },
+    "connect_config":{
+        "ws_url": "wss://api.upbit.com/websocket/v1",
+        "futures_ws_url": "",
+        "testnet_url": "wss://api.upbit.com/websocket/v1",
+        "mainnet_url": "wss://api.upbit.com/websocket/v1",
+        "use_testnet": false,
+        "connection_delay_ms": 100,
+        "max_connections": 100,
+        "max_retry_delay_secs": 300,
+        "initial_retry_delay_secs": 5
+    }
+}

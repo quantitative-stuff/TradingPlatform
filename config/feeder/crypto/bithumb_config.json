@@ -1,0 +1,42 @@
+{
+  "connect_config": {
+    "ws_url": "wss://ws-api.bithumb.com/websocket/v1",
+    "futures_ws_url": "",
+    "mainnet_url": "https://api.bithumb.com",
+    "testnet_url": "https://api.bithumb.com/test",
+    "use_testnet": false,
+    "requires_auth": false,
+    "timeout_secs": 10,
+    "initial_retry_delay_secs": 10,
+    "max_retry_delay_secs": 600,
+    "connection_delay_ms": 500
+  },
+  "subscribe_data": {
+    "spot_symbols": [
+      "KRW-BTC",
+      "KRW-ETH",
+      "KRW-XRP",
+      "KRW-SOL",
+      "KRW-ADA"
+    ],
+    "futures_symbols": [],
+    "stream_type": ["trade", "orderbook"],
+    "order_depth": 20
+  },
+  "feed_config": {
+    "asset_type": ["spot"],
+    "exchange": "bithumb",
+    "feed_data_type": ["trade", "orderbook"],
+    "max_symbols_per_connection": 5
+  },
+  "rate_limits": {
+    "requests_per_second": 5,
+    "websocket_connections_max": 5
+  },
+  "special_requirements": {
+    "timestamp_adjustment_ms": -32400000,
+    "timezone": "KST",
+    "symbol_separator": "_"
+  },
+  "output_dir": "data/bithumb"
+}

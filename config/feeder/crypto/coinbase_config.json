@@ -1,0 +1,38 @@
+{
+  "connect_config": {
+    "ws_url": "wss://advanced-trade-ws.coinbase.com",
+    "futures_ws_url": "",
+    "mainnet_url": "https://api.coinbase.com",
+    "testnet_url": "https://api-public.sandbox.pro.coinbase.com",
+    "use_testnet": false,
+    "requires_auth": true,
+    "timeout_secs": 10,
+    "initial_retry_delay_secs": 5,
+    "max_retry_delay_secs": 300,
+    "connection_delay_ms": 100
+  },
+  "subscribe_data": {
+    "spot_symbols": [
+      "BTC-USD",
+      "ETH-USD",
+      "SOL-USD",
+      "XRP-USD",
+      "ADA-USD"
+    ],
+    "futures_symbols": [],
+    "stream_type": ["market_trades", "level2", "ticker", "heartbeat"],
+    "order_depth": 20
+  },
+  "feed_config": {
+    "asset_type": ["spot"],
+    "exchange": "coinbase",
+    "feed_data_type": ["trade", "orderbook"],
+    "max_symbols_per_connection": 100
+  },
+  "rate_limits": {
+    "public_requests_per_second": 10,
+    "private_requests_per_second": 30,
+    "websocket_connections_max": 50
+  },
+  "output_dir": "data/coinbase"
+}
