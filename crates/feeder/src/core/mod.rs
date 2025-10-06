@@ -27,6 +27,7 @@ pub mod binary_udp_sender;
 pub mod market_cache;
 pub mod symbol_mapper_cache;
 pub mod multi_port_udp_sender;
+pub mod multi_port_udp_receiver;
 pub mod fast_json;
 
 // Export feeder metrics functions

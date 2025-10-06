@@ -1,289 +1,288 @@
-/// Multi-port UDP sender for distributing load across NIC queues
-/// Partitions symbols across multiple multicast ports for better RSS distribution
-/// Based on architecture: docs/feeder/UDP_Multicast_architecture.md
+/// Multi-Port UDP Sender with Proportional Address Allocation
+///
+/// **Proportional Port Allocation (20 Total Addresses):**
+/// - Binance: 8 addresses (40%)
+/// - Bybit: 2 addresses (10%)
+/// - OKX: 2 addresses (10%)
+/// - Deribit: 2 addresses (10%)
+/// - Upbit: 2 addresses (10%)
+/// - Coinbase: 2 addresses (10%)
+/// - Bithumb: 2 addresses (10%)
+///
+/// **Multicast Address Schema:**
+/// Each exchange gets dedicated addresses for Trade and OrderBook data
+///
+/// **Binance (8 addresses):**
+/// - Trades: 239.10.1.1:9000-9003 (4 addresses)
+/// - OrderBooks: 239.10.1.1:9100-9103 (4 addresses)
+///
+/// **Other Exchanges (2 addresses each):**
+/// - Bybit: 239.10.2.1:9000 (trade), 239.10.2.1:9100 (orderbook)
+/// - OKX: 239.10.3.1:9000 (trade), 239.10.3.1:9100 (orderbook)
+/// - Deribit: 239.10.4.1:9000 (trade), 239.10.4.1:9100 (orderbook)
+/// - Upbit: 239.10.5.1:9000 (trade), 239.10.5.1:9100 (orderbook)
+/// - Coinbase: 239.10.6.1:9000 (trade), 239.10.6.1:9100 (orderbook)
+/// - Bithumb: 239.10.7.1:9000 (trade), 239.10.7.1:9100 (orderbook)
 
 use crate::core::BinaryUdpPacket;
 use std::net::UdpSocket;
-use std::collections::hash_map::DefaultHasher;
-use std::hash::{Hash, Hasher};
+use std::collections::HashMap;
 use std::sync::Arc;
 use parking_lot::RwLock;
-use anyhow::Result;
+use anyhow::{Result, Context};
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
+use tracing::{info, warn};
 
-/// Multi-port configuration
-#[derive(Debug, Clone)]
-pub struct MultiPortConfig {
-    /// Base multicast address (e.g., "239.0.0.1")
-    pub base_address: String,
-
-    /// Starting port number
-    pub base_port: u16,
-
-    /// Number of ports to use (typically 4-8)
-    pub num_ports: usize,
-
-    /// Partitioning strategy
-    pub strategy: PartitionStrategy,
-}
-
-impl Default for MultiPortConfig {
-    fn default() -> Self {
-        MultiPortConfig {
-            base_address: "239.0.0.1".to_string(),
-            base_port: 9001,
-            num_ports: 4,
-            strategy: PartitionStrategy::SymbolHash,
-        }
-    }
-}
-
-/// How to partition symbols across ports
+/// Exchange configuration
 #[derive(Debug, Clone, Copy)]
-pub enum PartitionStrategy {
-    /// Hash symbol name (good for even distribution)
-    SymbolHash,
-
-    /// Hash exchange + symbol (keeps same symbol on different exchanges separate)
-    ExchangeSymbolHash,
-
-    /// Round-robin (simple, predictable)
-    RoundRobin,
+pub struct ExchangeConfig {
+    pub id: u8,
+    pub name: &'static str,
+    pub address_count: usize,  // Total addresses (trade + orderbook)
 }
 
-/// Multi-port UDP sender
-pub struct MultiPortUdpSender {
-    config: MultiPortConfig,
+const EXCHANGES: [ExchangeConfig; 7] = [
+    ExchangeConfig { id: 1, name: "binance",  address_count: 8 },  // 4 trade + 4 orderbook
+    ExchangeConfig { id: 2, name: "bybit",    address_count: 2 },  // 1 trade + 1 orderbook
+    ExchangeConfig { id: 3, name: "okx",      address_count: 2 },
+    ExchangeConfig { id: 4, name: "deribit",  address_count: 2 },
+    ExchangeConfig { id: 5, name: "upbit",    address_count: 2 },
+    ExchangeConfig { id: 6, name: "coinbase", address_count: 2 },
+    ExchangeConfig { id: 7, name: "bithumb",  address_count: 2 },
+];
+
+/// Data type routing
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum DataType {
+    Trade,
+    OrderBook,
+}
+
+/// Address pool for one exchange + data type
+struct AddressPool {
+    exchange_name: String,
+    exchange_id: u8,
+    data_type: DataType,
     sockets: Vec<UdpSocket>,
-    stats: Arc<RwLock<MultiPortStats>>,
-    round_robin_counter: Arc<RwLock<usize>>,
+    stats: Vec<u64>,
 }
 
-/// Statistics per port
-#[derive(Debug, Clone)]
-pub struct MultiPortStats {
-    pub packets_per_port: Vec<u64>,
-    pub bytes_per_port: Vec<u64>,
-    pub errors_per_port: Vec<u64>,
-}
+impl AddressPool {
+    fn new(config: &ExchangeConfig, data_type: DataType) -> Result<Self> {
+        let base_addr = format!("239.10.{}.1", config.id);
 
-impl MultiPortUdpSender {
-    /// Create new multi-port sender
-    pub fn new(config: MultiPortConfig) -> Result<Self> {
-        let mut sockets = Vec::with_capacity(config.num_ports);
+        // Calculate number of ports for this data type
+        let port_count = if config.id == 1 { 4 } else { 1 }; // Binance gets 4, others get 1
 
-        // Create socket for each port
-        for i in 0..config.num_ports {
-            let port = config.base_port + i as u16;
-            let addr = format!("{}:{}", config.base_address, port);
+        let base_port = match data_type {
+            DataType::Trade => 9000,
+            DataType::OrderBook => 9100,
+        };
 
-            let socket = UdpSocket::bind("0.0.0.0:0")?;
-            socket.connect(&addr)?;
+        let mut sockets = Vec::with_capacity(port_count);
 
-            // Optional: Set socket options using socket2 if needed
-            // For now, use defaults
+        info!(
+            "Creating {} pool for {}: {} ports",
+            match data_type {
+                DataType::Trade => "Trade",
+                DataType::OrderBook => "OrderBook",
+            },
+            config.name,
+            port_count
+        );
+
+        for i in 0..port_count {
+            let port = base_port + i as u16;
+            let target_addr = format!("{}:{}", base_addr, port);
+
+            let socket = UdpSocket::bind("0.0.0.0:0")
+                .with_context(|| format!("Failed to bind for {}", target_addr))?;
+
+            socket.connect(&target_addr)
+                .with_context(|| format!("Failed to connect to {}", target_addr))?;
+
+            socket.set_multicast_ttl_v4(1)?;
+            socket.set_multicast_loop_v4(false)?;
+            socket.set_send_buffer_size(2 * 1024 * 1024)?; // 2MB buffer
 
             sockets.push(socket);
         }
 
-        let stats = MultiPortStats {
-            packets_per_port: vec![0; config.num_ports],
-            bytes_per_port: vec![0; config.num_ports],
-            errors_per_port: vec![0; config.num_ports],
-        };
+        info!(
+            "✅ {} {} pool: {} ports {}-{}",
+            config.name,
+            match data_type {
+                DataType::Trade => "Trade",
+                DataType::OrderBook => "OrderBook",
+            },
+            base_addr,
+            base_port,
+            base_port + port_count as u16 - 1
+        );
 
-        Ok(MultiPortUdpSender {
-            config,
+        Ok(AddressPool {
+            exchange_name: config.name.to_string(),
+            exchange_id: config.id,
+            data_type,
             sockets,
-            stats: Arc::new(RwLock::new(stats)),
-            round_robin_counter: Arc::new(RwLock::new(0)),
+            stats: vec![0; port_count],
         })
     }
 
-    /// Select port based on symbol and exchange
-    fn select_port(&self, symbol: &str, exchange: &str) -> usize {
-        match self.config.strategy {
-            PartitionStrategy::SymbolHash => {
-                let mut hasher = DefaultHasher::new();
-                symbol.hash(&mut hasher);
-                (hasher.finish() as usize) % self.config.num_ports
-            }
-            PartitionStrategy::ExchangeSymbolHash => {
-                let mut hasher = DefaultHasher::new();
-                exchange.hash(&mut hasher);
-                symbol.hash(&mut hasher);
-                (hasher.finish() as usize) % self.config.num_ports
-            }
-            PartitionStrategy::RoundRobin => {
-                let mut counter = self.round_robin_counter.write();
-                let port = *counter % self.config.num_ports;
-                *counter = counter.wrapping_add(1);
-                port
-            }
+    fn select_socket(&self, symbol: &str) -> usize {
+        if self.sockets.len() == 1 {
+            0
+        } else {
+            let mut hasher = DefaultHasher::new();
+            symbol.hash(&mut hasher);
+            (hasher.finish() as usize) % self.sockets.len()
         }
     }
 
-    /// Send binary packet to appropriate port
-    pub fn send_packet(&self, mut packet: BinaryUdpPacket) -> Result<()> {
-        // Extract symbol and exchange from header
-        let symbol = parse_name(&packet.header.symbol);
-        let exchange = parse_name(&packet.header.exchange);
-
-        // Select port
-        let port_idx = self.select_port(&symbol, &exchange);
-
-        // Serialize packet
-        let bytes = packet.to_bytes();
-        let size = bytes.len();
-
-        // Send to selected port
-        match self.sockets[port_idx].send(&bytes) {
-            Ok(_) => {
-                let mut stats = self.stats.write();
-                stats.packets_per_port[port_idx] += 1;
-                stats.bytes_per_port[port_idx] += size as u64;
-                Ok(())
-            }
-            Err(e) => {
-                let mut stats = self.stats.write();
-                stats.errors_per_port[port_idx] += 1;
-                Err(e.into())
-            }
-        }
-    }
-
-    /// Send orderbook update (helper)
-    pub fn send_orderbook(
-        &self,
-        exchange: &str,
-        symbol: &str,
-        bids: &[(f64, f64)],
-        asks: &[(f64, f64)],
-        exchange_ts: u64,
-    ) -> Result<()> {
-        // Send bids
-        if !bids.is_empty() {
-            let bid_packet = BinaryUdpPacket::from_orderbook(
-                &crate::core::OrderBookData {
-                    exchange: exchange.to_string(),
-                    symbol: symbol.to_string(),
-                    bids: bids.to_vec(),
-                    asks: vec![],
-                    timestamp: exchange_ts as i64 / 1_000_000, // ns to ms
-                    asset_type: "crypto".to_string(),
-                },
-                true, // is_bid
-            );
-            self.send_packet(bid_packet)?;
-        }
-
-        // Send asks
-        if !asks.is_empty() {
-            let ask_packet = BinaryUdpPacket::from_orderbook(
-                &crate::core::OrderBookData {
-                    exchange: exchange.to_string(),
-                    symbol: symbol.to_string(),
-                    bids: vec![],
-                    asks: asks.to_vec(),
-                    timestamp: exchange_ts as i64 / 1_000_000, // ns to ms
-                    asset_type: "crypto".to_string(),
-                },
-                false, // is_ask
-            );
-            self.send_packet(ask_packet)?;
-        }
-
+    fn send(&mut self, symbol: &str, data: &[u8]) -> Result<()> {
+        let idx = self.select_socket(symbol);
+        self.sockets[idx].send(data)?;
+        self.stats[idx] += 1;
         Ok(())
     }
 
-    /// Send trade update (helper)
-    pub fn send_trade(
-        &self,
-        exchange: &str,
-        symbol: &str,
-        price: f64,
-        quantity: f64,
-        is_buy: bool,
-        exchange_ts: u64,
-    ) -> Result<()> {
-        let trade_packet = BinaryUdpPacket::from_trade(&crate::core::TradeData {
-            exchange: exchange.to_string(),
-            symbol: symbol.to_string(),
-            price,
-            quantity,
-            timestamp: exchange_ts as i64 / 1_000_000, // ns to ms
-            asset_type: "crypto".to_string(),
-        });
-
-        self.send_packet(trade_packet)
-    }
-
-    /// Get current statistics
-    pub fn get_stats(&self) -> MultiPortStats {
-        self.stats.read().clone()
-    }
-
-    /// Print statistics summary
-    pub fn print_stats(&self) {
-        let stats = self.stats.read();
-        println!("=== Multi-Port UDP Sender Statistics ===");
-        println!("Strategy: {:?}", self.config.strategy);
-        println!("Ports: {} - {}", self.config.base_port, self.config.base_port + self.config.num_ports as u16 - 1);
-        println!();
-
-        let total_packets: u64 = stats.packets_per_port.iter().sum();
-        let total_bytes: u64 = stats.bytes_per_port.iter().sum();
-        let total_errors: u64 = stats.errors_per_port.iter().sum();
-
-        for i in 0..self.config.num_ports {
-            let port = self.config.base_port + i as u16;
-            let packets = stats.packets_per_port[i];
-            let bytes = stats.bytes_per_port[i];
-            let errors = stats.errors_per_port[i];
-            let pct = if total_packets > 0 {
-                (packets as f64 / total_packets as f64) * 100.0
-            } else {
-                0.0
-            };
-
-            println!(
-                "Port {}: {:>8} packets ({:>5.1}%), {:>10} bytes, {:>4} errors",
-                port, packets, pct, bytes, errors
-            );
-        }
-
-        println!();
-        println!("Total: {} packets, {} bytes, {} errors", total_packets, total_bytes, total_errors);
-    }
-
-    /// Reset statistics
-    pub fn reset_stats(&self) {
-        let mut stats = self.stats.write();
-        stats.packets_per_port.iter_mut().for_each(|v| *v = 0);
-        stats.bytes_per_port.iter_mut().for_each(|v| *v = 0);
-        stats.errors_per_port.iter_mut().for_each(|v| *v = 0);
+    fn get_stats(&self) -> (u64, Vec<u64>) {
+        let total: u64 = self.stats.iter().sum();
+        (total, self.stats.clone())
     }
 }
 
-/// Parse null-terminated string from fixed-size array
+/// Multi-port UDP sender with proportional allocation
+pub struct MultiPortUdpSender {
+    pools: HashMap<(String, DataType), Arc<RwLock<AddressPool>>>,
+}
+
+impl MultiPortUdpSender {
+    pub fn new() -> Result<Self> {
+        let mut pools = HashMap::new();
+
+        info!("Initializing Multi-Port UDP Sender (Proportional)");
+        info!("Address allocation (20 total):");
+        info!("  Binance  → 8 addresses (4 trade + 4 orderbook)");
+        info!("  Others   → 2 addresses each (1 trade + 1 orderbook)");
+
+        for exchange in &EXCHANGES {
+            let trade_pool = AddressPool::new(exchange, DataType::Trade)?;
+            pools.insert(
+                (exchange.name.to_string(), DataType::Trade),
+                Arc::new(RwLock::new(trade_pool)),
+            );
+
+            let orderbook_pool = AddressPool::new(exchange, DataType::OrderBook)?;
+            pools.insert(
+                (exchange.name.to_string(), DataType::OrderBook),
+                Arc::new(RwLock::new(orderbook_pool)),
+            );
+        }
+
+        info!("✅ All 20 multicast addresses initialized");
+        Ok(MultiPortUdpSender { pools })
+    }
+
+    pub fn send_trade(&self, exchange: &str, symbol: &str, packet_bytes: &[u8]) -> Result<()> {
+        let key = (exchange.to_lowercase(), DataType::Trade);
+        let pool = self.pools
+            .get(&key)
+            .ok_or_else(|| anyhow::anyhow!("Trade pool not found: {}", exchange))?;
+        pool.write().send(symbol, packet_bytes)
+    }
+
+    pub fn send_orderbook(&self, exchange: &str, symbol: &str, packet_bytes: &[u8]) -> Result<()> {
+        let key = (exchange.to_lowercase(), DataType::OrderBook);
+        let pool = self.pools
+            .get(&key)
+            .ok_or_else(|| anyhow::anyhow!("OrderBook pool not found: {}", exchange))?;
+        pool.write().send(symbol, packet_bytes)
+    }
+
+    pub fn send_packet(&self, mut packet: BinaryUdpPacket) -> Result<()> {
+        let symbol = parse_name(&packet.header.symbol);
+        let exchange = parse_name(&packet.header.exchange);
+        let packet_type = packet.header.packet_type();
+        let bytes = packet.to_bytes();
+
+        match packet_type {
+            1 => self.send_trade(&exchange, &symbol, &bytes),
+            2 => self.send_orderbook(&exchange, &symbol, &bytes),
+            _ => Err(anyhow::anyhow!("Unknown packet type: {}", packet_type)),
+        }
+    }
+
+    pub fn get_total_packets(&self) -> u64 {
+        self.pools.values().map(|p| p.read().get_stats().0).sum()
+    }
+
+    pub fn print_stats(&self) {
+        println!("\n╔══════════════════════════════════════════════════════╗");
+        println!("║  Multi-Port UDP Sender Statistics (Proportional)    ║");
+        println!("╠══════════════════════════════════════════════════════╣");
+        println!("║  Total: 20 multicast addresses                       ║");
+        println!("╚══════════════════════════════════════════════════════╝\n");
+
+        let mut grand_total = 0u64;
+
+        for exchange in &EXCHANGES {
+            let trade_key = (exchange.name.to_string(), DataType::Trade);
+            let orderbook_key = (exchange.name.to_string(), DataType::OrderBook);
+
+            if let (Some(tp), Some(op)) = (self.pools.get(&trade_key), self.pools.get(&orderbook_key)) {
+                let (tt, ts) = tp.read().get_stats();
+                let (ot, os) = op.read().get_stats();
+                let total = tt + ot;
+                grand_total += total;
+
+                if total > 0 {
+                    println!("┌─ {} ({} addresses) ─────", exchange.name.to_uppercase(), exchange.address_count);
+                    if tt > 0 {
+                        println!("│  📈 Trades: {} packets", tt);
+                        for (i, &c) in ts.iter().enumerate() {
+                            if c > 0 {
+                                println!("│    Addr {}: {} pkts", i, c);
+                            }
+                        }
+                    }
+                    if ot > 0 {
+                        println!("│  📊 OrderBooks: {} packets", ot);
+                        for (i, &c) in os.iter().enumerate() {
+                            if c > 0 {
+                                println!("│    Addr {}: {} pkts", i, c);
+                            }
+                        }
+                    }
+                    println!("│  Total: {}\n", total);
+                }
+            }
+        }
+
+        println!("╔══════════════════════════════════════════════════════╗");
+        println!("║  GRAND TOTAL: {:>10} packets                      ║", grand_total);
+        println!("╚══════════════════════════════════════════════════════╝\n");
+    }
+}
+
 fn parse_name(bytes: &[u8]) -> String {
     let null_pos = bytes.iter().position(|&b| b == 0).unwrap_or(bytes.len());
     String::from_utf8_lossy(&bytes[..null_pos]).to_string()
 }
 
-// Global instance (optional)
+// Global instance
 use once_cell::sync::Lazy;
 
 static GLOBAL_MULTI_PORT_SENDER: Lazy<RwLock<Option<Arc<MultiPortUdpSender>>>> =
     Lazy::new(|| RwLock::new(None));
 
-/// Initialize global multi-port sender
-pub fn init_global_multi_port_sender(config: MultiPortConfig) -> Result<()> {
-    let sender = MultiPortUdpSender::new(config)?;
+pub fn init_global_multi_port_sender() -> Result<()> {
+    let sender = MultiPortUdpSender::new()?;
     *GLOBAL_MULTI_PORT_SENDER.write() = Some(Arc::new(sender));
     Ok(())
 }
 
-/// Get global multi-port sender
 pub fn get_multi_port_sender() -> Option<Arc<MultiPortUdpSender>> {
     GLOBAL_MULTI_PORT_SENDER.read().as_ref().map(Arc::clone)
 }
@@ -293,73 +292,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_port_selection_symbol_hash() {
-        let config = MultiPortConfig {
-            base_address: "239.0.0.1".to_string(),
-            base_port: 9001,
-            num_ports: 4,
-            strategy: PartitionStrategy::SymbolHash,
-        };
-
-        let sender = MultiPortUdpSender::new(config).unwrap();
-
-        // Same symbol should always go to same port
-        let port1 = sender.select_port("BTC/USDT", "binance");
-        let port2 = sender.select_port("BTC/USDT", "binance");
-        assert_eq!(port1, port2);
-
-        // Same symbol on different exchange should go to same port (SymbolHash)
-        let port3 = sender.select_port("BTC/USDT", "bybit");
-        assert_eq!(port1, port3);
-
-        // Different symbol should (likely) go to different port
-        let port4 = sender.select_port("ETH/USDT", "binance");
-        // Not guaranteed but very likely
-        println!("BTC port: {}, ETH port: {}", port1, port4);
-    }
-
-    #[test]
-    fn test_port_selection_exchange_symbol_hash() {
-        let config = MultiPortConfig {
-            base_address: "239.0.0.1".to_string(),
-            base_port: 9001,
-            num_ports: 4,
-            strategy: PartitionStrategy::ExchangeSymbolHash,
-        };
-
-        let sender = MultiPortUdpSender::new(config).unwrap();
-
-        // Same symbol on different exchange may go to different port
-        let port1 = sender.select_port("BTC/USDT", "binance");
-        let port2 = sender.select_port("BTC/USDT", "bybit");
-        println!("Binance BTC port: {}, Bybit BTC port: {}", port1, port2);
-    }
-
-    #[test]
-    fn test_port_selection_round_robin() {
-        let config = MultiPortConfig {
-            base_address: "239.0.0.1".to_string(),
-            base_port: 9001,
-            num_ports: 4,
-            strategy: PartitionStrategy::RoundRobin,
-        };
-
-        let sender = MultiPortUdpSender::new(config).unwrap();
-
-        // Should cycle through ports
-        let ports: Vec<usize> = (0..8)
-            .map(|_| sender.select_port("BTC/USDT", "binance"))
-            .collect();
-
-        assert_eq!(ports, vec![0, 1, 2, 3, 0, 1, 2, 3]);
-    }
-
-    #[test]
-    fn test_parse_name() {
-        let bytes = b"binance\0\0\0\0\0\0\0\0\0\0\0\0\0";
-        assert_eq!(parse_name(bytes), "binance");
-
-        let bytes = b"BTC/USDT\0\0\0\0\0\0\0\0\0\0\0\0";
-        assert_eq!(parse_name(bytes), "BTC/USDT");
+    fn test_sender_creation() {
+        let sender = MultiPortUdpSender::new();
+        assert!(sender.is_ok());
+        let sender = sender.unwrap();
+        assert_eq!(sender.pools.len(), 14); // 7 exchanges × 2 data types
     }
 }
