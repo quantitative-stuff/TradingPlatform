@@ -1,189 +1,146 @@
-/// Multi-port UDP receiver
-/// Spawns one thread per port for parallel processing
+/// Multi-Port UDP Receiver (20 Parallel Streams)
+///
+/// Receives market data from 20 multicast addresses in parallel:
+/// - Binance: 8 receiver threads (4 trade + 4 orderbook)
+/// - Others: 2 receiver threads each (1 trade + 1 orderbook)
+///
+/// Usage:
+///   cargo run --bin multi_port_receiver
 
-use feeder::core::{
-    PacketHeader, OrderBookItem, TradeItem,
-    MarketCache, SharedMarketCache,
-};
-use std::net::UdpSocket;
-use std::sync::Arc;
-use std::time::{SystemTime, UNIX_EPOCH};
-use std::collections::HashMap;
+use feeder::core::multi_port_udp_receiver::{MultiPortUdpReceiver, DataType};
+use feeder::core::binary_udp_packet::{PacketHeader, OrderBookItem, TradeItem};
+use tokio::signal;
+use tracing::{info, error, warn};
+use std::time::Duration;
 
-const BASE_PORT: u16 = 9001;
-const NUM_PORTS: usize = 4;
-const MAX_PACKET_SIZE: usize = 1500;
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    // Initialize logging
+    tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::INFO)
+        .with_target(false)
+        .with_thread_ids(true)
+        .init();
 
-/// Get exchange ID from name
-fn get_exchange_id(name: &str) -> usize {
-    match name.to_lowercase().as_str() {
-        "binance" => 0,
-        "bybit" => 1,
-        "upbit" => 2,
-        "coinbase" => 3,
-        "okx" => 4,
-        "deribit" => 5,
-        "bithumb" => 6,
-        "ls" => 7,
-        _ => 0,
+    info!("╔════════════════════════════════════════════════════════╗");
+    info!("║      Multi-Port UDP Receiver - 20 Parallel Streams    ║");
+    info!("╠════════════════════════════════════════════════════════╣");
+    info!("║  Binance:  8 addresses (4 trade + 4 orderbook)        ║");
+    info!("║  Bybit:    2 addresses (1 trade + 1 orderbook)        ║");
+    info!("║  OKX:      2 addresses (1 trade + 1 orderbook)        ║");
+    info!("║  Deribit:  2 addresses (1 trade + 1 orderbook)        ║");
+    info!("║  Upbit:    2 addresses (1 trade + 1 orderbook)        ║");
+    info!("║  Coinbase: 2 addresses (1 trade + 1 orderbook)        ║");
+    info!("║  Bithumb:  2 addresses (1 trade + 1 orderbook)        ║");
+    info!("║  ──────────────────────────────────────────────────    ║");
+    info!("║  Total:    20 receiver threads running in parallel    ║");
+    info!("╚════════════════════════════════════════════════════════╝");
+
+    // Create receiver with packet handler
+    let receiver = MultiPortUdpReceiver::new(|data, exchange, receiver_id, data_type| async move {
+        // Parse binary packet
+        if data.len() < 58 {
+            warn!("Received packet too small from {}: {} bytes", receiver_id, data.len());
+            return;
+        }
+
+        // Parse header (58 bytes)
+        let header = parse_packet_header(&data);
+
+        match data_type {
+            DataType::Trade => {
+                if let Some(trade) = parse_trade_packet(&data, &header) {
+                    info!(
+                        "[{}] Trade: {} @ ${:.2} x {:.4}",
+                        exchange,
+                        parse_string(&header.symbol),
+                        trade.price,
+                        trade.quantity,
+                    );
+                }
+            }
+            DataType::OrderBook => {
+                if let Some(levels) = parse_orderbook_packet(&data, &header) {
+                    info!(
+                        "[{}] OrderBook: {} - {} levels ({})",
+                        exchange,
+                        parse_string(&header.symbol),
+                        levels,
+                        if header.is_bid() { "BIDS" } else { "ASKS" }
+                    );
+                }
+            }
+        }
+    }).await?;
+
+    info!("✅ Multi-Port Receiver started successfully");
+    info!("Listening on 20 multicast addresses...");
+    info!("Press Ctrl+C to stop");
+
+    // Wait for Ctrl+C (don't print stats in loop to avoid move issue)
+    tokio::select! {
+        _ = signal::ctrl_c() => {
+            info!("Shutting down...");
+        }
+    }
+
+    // Print final stats
+    receiver.print_stats();
+    receiver.abort_all();
+
+    info!("Receiver stopped");
+    Ok(())
+}
+
+/// Parse packet header from raw bytes
+fn parse_packet_header(data: &[u8]) -> PacketHeader {
+    unsafe {
+        let mut header: PacketHeader = std::ptr::read(data.as_ptr() as *const PacketHeader);
+        header.from_network_order();
+        header
     }
 }
 
-/// Parse null-terminated string
-fn parse_name(bytes: &[u8]) -> String {
+/// Parse null-terminated string from header field
+fn parse_string(bytes: &[u8]) -> String {
     let null_pos = bytes.iter().position(|&b| b == 0).unwrap_or(bytes.len());
     String::from_utf8_lossy(&bytes[..null_pos]).to_string()
 }
 
-/// UDP receiver thread for one port
-fn udp_receiver_thread(
-    port: u16,
-    cache: SharedMarketCache,
-    symbol_map: Arc<parking_lot::RwLock<HashMap<String, usize>>>,
-) {
-    let addr = format!("0.0.0.0:{}", port);
-    let socket = UdpSocket::bind(&addr).expect(&format!("Failed to bind to {}", addr));
+/// Parse trade packet
+fn parse_trade_packet(data: &[u8], header: &PacketHeader) -> Option<TradeData> {
+    if data.len() < 58 + 32 {
+        return None;
+    }
 
-    println!("[Port {}] Listening on {}", port, addr);
+    let item_count = header.item_count() as usize;
+    if item_count == 0 {
+        return None;
+    }
 
-    let mut buf = [0u8; MAX_PACKET_SIZE];
-    let mut packet_count = 0u64;
-    let mut last_stats = SystemTime::now();
+    unsafe {
+        let mut trade_item: TradeItem = std::ptr::read((data.as_ptr().add(58)) as *const TradeItem);
+        trade_item.from_network_order();
 
-    loop {
-        match socket.recv_from(&mut buf) {
-            Ok((len, _src)) => {
-                if len < 58 {
-                    continue;
-                }
-
-                // Parse header
-                let header: &PacketHeader = unsafe {
-                    &*(buf.as_ptr() as *const PacketHeader)
-                };
-
-                if header.protocol_version != 1 {
-                    continue;
-                }
-
-                // Extract fields
-                let exchange_name = parse_name(&header.exchange);
-                let symbol_name = parse_name(&header.symbol);
-                let packet_type = (header.flags_and_count & 0b0111_0000) >> 4;
-                let is_bid = (header.flags_and_count & 0b0000_1000) != 0;
-                let item_count = (header.flags_and_count & 0b0000_0111) as usize;
-
-                let exchange_ts = u64::from_be(header.exchange_timestamp);
-                let local_ts = SystemTime::now()
-                    .duration_since(UNIX_EPOCH)
-                    .unwrap()
-                    .as_nanos() as u64;
-
-                // Map to IDs
-                let exchange_id = get_exchange_id(&exchange_name);
-
-                let symbol_id = {
-                    let read_map = symbol_map.read();
-                    if let Some(&id) = read_map.get(&symbol_name) {
-                        id
-                    } else {
-                        drop(read_map);
-                        let mut write_map = symbol_map.write();
-                        let id = write_map.len();
-                        write_map.insert(symbol_name.clone(), id);
-                        id
-                    }
-                };
-
-                // Update cache
-                if let Some(slot) = cache.get_slot(exchange_id, symbol_id) {
-                    match packet_type {
-                        1 => {
-                            // Trade
-                            if item_count > 0 && len >= 58 + 32 {
-                                let trade_item: &TradeItem = unsafe {
-                                    &*(buf[58..].as_ptr() as *const TradeItem)
-                                };
-                                let price = i64::from_be(trade_item.price);
-                                slot.update_trade_fast(price, exchange_ts, local_ts);
-                                packet_count += 1;
-                            }
-                        }
-                        2 => {
-                            // OrderBook
-                            if item_count > 0 && len >= 58 + 16 {
-                                let ob_item: &OrderBookItem = unsafe {
-                                    &*(buf[58..].as_ptr() as *const OrderBookItem)
-                                };
-                                let price = i64::from_be(ob_item.price);
-                                let qty = i64::from_be(ob_item.quantity);
-
-                                if is_bid {
-                                    slot.update_bid_fast(price, qty, exchange_ts, local_ts);
-                                } else {
-                                    slot.update_ask_fast(price, qty, exchange_ts, local_ts);
-                                }
-                                packet_count += 1;
-                            }
-                        }
-                        _ => {}
-                    }
-                }
-
-                // Stats every 5 seconds
-                if let Ok(elapsed) = SystemTime::now().duration_since(last_stats) {
-                    if elapsed.as_secs() >= 5 {
-                        println!(
-                            "[Port {}] Packets: {}, Rate: {}/s",
-                            port,
-                            packet_count,
-                            packet_count / elapsed.as_secs()
-                        );
-                        packet_count = 0;
-                        last_stats = SystemTime::now();
-                    }
-                }
-            }
-            Err(e) => {
-                eprintln!("[Port {}] Error: {}", port, e);
-            }
-        }
+        Some(TradeData {
+            price: trade_item.get_price(),
+            quantity: trade_item.get_quantity(),
+        })
     }
 }
 
-fn main() {
-    println!("=== Multi-Port UDP Receiver ===");
-    println!("Listening on ports {} - {}", BASE_PORT, BASE_PORT + NUM_PORTS as u16 - 1);
-    println!();
-
-    // Create shared cache
-    let cache = Arc::new(MarketCache::new(8, 1000));
-    let symbol_map = Arc::new(parking_lot::RwLock::new(HashMap::new()));
-
-    println!("Cache created: 8 exchanges, 1000 symbol slots");
-    println!();
-
-    // Spawn receiver thread for each port
-    let mut handles = vec![];
-
-    for i in 0..NUM_PORTS {
-        let port = BASE_PORT + i as u16;
-        let cache_clone = Arc::clone(&cache);
-        let symbol_map_clone = Arc::clone(&symbol_map);
-
-        let handle = std::thread::spawn(move || {
-            udp_receiver_thread(port, cache_clone, symbol_map_clone);
-        });
-
-        handles.push(handle);
+/// Parse orderbook packet (just returns count of levels)
+fn parse_orderbook_packet(data: &[u8], header: &PacketHeader) -> Option<usize> {
+    let item_count = header.item_count() as usize;
+    if item_count == 0 || data.len() < 58 + (item_count * 16) {
+        return None;
     }
 
-    println!("Started {} receiver threads", NUM_PORTS);
-    println!("Press Ctrl+C to exit");
-    println!();
+    Some(item_count)
+}
 
-    // Wait for all threads
-    for handle in handles {
-        handle.join().unwrap();
-    }
+#[derive(Debug)]
+struct TradeData {
+    price: f64,
+    quantity: f64,
 }

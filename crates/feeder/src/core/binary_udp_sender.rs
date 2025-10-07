@@ -112,6 +112,15 @@ impl BinaryUdpSender {
         Ok(())
     }
 
+    // Overloaded helpers - accept either struct or individual parameters
+    pub fn send_trade_data(&self, trade: TradeData) -> Result<()> {
+        self.send_trade(trade)
+    }
+
+    pub fn send_orderbook_data(&self, orderbook: OrderBookData) -> Result<()> {
+        self.send_orderbook(orderbook)
+    }
+
     /// Send stats as text packet (for compatibility with monitoring)
     pub fn send_stats(&self, exchange: &str, trades: usize, orderbooks: usize) -> Result<()> {
         self.tx.send(BinaryUdpMessage::Stats {

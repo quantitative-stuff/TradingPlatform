@@ -165,6 +165,15 @@ impl OptimizedUdpSender {
             .map_err(|_| crate::error::Error::Connection("UDP channel closed".to_string()))?;
         Ok(())
     }
+
+    // Overloaded helpers - accept either struct or individual parameters
+    pub fn send_trade_data(&self, trade: TradeData) -> Result<()> {
+        self.send_trade(trade)
+    }
+
+    pub fn send_orderbook_data(&self, orderbook: OrderBookData) -> Result<()> {
+        self.send_orderbook(orderbook)
+    }
     
     pub fn send_stats(&self, exchange: &str, trades: usize, orderbooks: usize) -> Result<()> {
         self.tx.send(UdpPacket::Stats {

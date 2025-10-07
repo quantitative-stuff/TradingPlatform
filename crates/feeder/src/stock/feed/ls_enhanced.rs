@@ -373,7 +373,7 @@ impl LSEnhancedExchange {
             };
 
             if let Some(sender) = get_optimized_udp_sender() {
-                let _ = sender.send_trade(trade_data);
+                let _ = sender.send_trade_data(trade_data);
             }
         }
         Ok(())
@@ -422,7 +422,7 @@ impl LSEnhancedExchange {
             };
 
             if let Some(sender) = get_optimized_udp_sender() {
-                let _ = sender.send_orderbook(orderbook_data);
+                let _ = sender.send_orderbook_data(orderbook_data);
             }
         }
         Ok(())
@@ -455,7 +455,7 @@ impl LSEnhancedExchange {
             };
 
             if let Some(sender) = get_optimized_udp_sender() {
-                let _ = sender.send_trade(trade_data);
+                let _ = sender.send_trade_data(trade_data);
             }
         }
         Ok(())
@@ -515,7 +515,7 @@ impl LSEnhancedExchange {
             };
 
             if let Some(sender) = get_optimized_udp_sender() {
-                let _ = sender.send_trade(trade_data);
+                let _ = sender.send_trade_data(trade_data);
             }
         }
         Ok(())
@@ -550,7 +550,7 @@ impl LSEnhancedExchange {
             };
 
             if let Some(sender) = get_optimized_udp_sender() {
-                let _ = sender.send_trade(trade_data);
+                let _ = sender.send_trade_data(trade_data);
             }
         }
         Ok(())

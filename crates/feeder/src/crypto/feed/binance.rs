@@ -10,7 +10,7 @@ use crate::core::{
     Feeder, TRADES, ORDERBOOKS, COMPARE_NOTIFY, TradeData, OrderBookData,
     SymbolMapper, get_shutdown_receiver, CONNECTION_STATS,
     // NEW: Multi-port UDP sender
-    MultiPortUdpSender, MultiPortConfig, PartitionStrategy,
+    MultiPortUdpSender, get_multi_port_sender,
 };
 use crate::core::robust_connection::ExchangeConnectionLimits;
 use crate::error::{Result, Error};
@@ -65,24 +65,9 @@ impl BinanceExchange {
             }
         }
 
-        // Initialize multi-port UDP sender
+        // Use global multi-port UDP sender (initialized in feeder_direct)
         let multi_port_sender = if USE_MULTI_PORT_UDP {
-            let udp_config = MultiPortConfig {
-                base_address: "239.0.0.1".to_string(),
-                base_port: 9001,
-                num_ports: 4,
-                strategy: PartitionStrategy::SymbolHash,
-            };
-            match MultiPortUdpSender::new(udp_config) {
-                Ok(sender) => {
-                    info!("Binance: Initialized multi-port UDP sender (ports 9001-9004)");
-                    Some(Arc::new(sender))
-                }
-                Err(e) => {
-                    warn!("Binance: Failed to initialize multi-port UDP sender: {}, falling back to single-port", e);
-                    None
-                }
-            }
+            get_multi_port_sender()
         } else {
             None
         };
@@ -495,27 +480,19 @@ fn process_binance_message(
             // Send UDP packet using multi-port sender if enabled, fallback to single-port
             if USE_MULTI_PORT_UDP {
                 if let Some(sender) = &multi_port_sender {
-                    let is_buy = trade.quantity > 0.0; // Positive quantity = buy
-                    let _ = sender.send_trade(
-                        "binance",
-                        &trade.symbol,
-                        trade.price,
-                        trade.quantity.abs(),
-                        is_buy,
-                        trade.timestamp as u64 * 1_000_000, // ms to ns
-                    );
+                    let _ = sender.send_trade_data(trade.clone());
                     // println!("Binance: Sent multi-port UDP for {} trade at price {}", trade.symbol, trade.price);
                 } else {
                     // Fallback to single-port
                     if let Some(sender) = crate::core::get_binary_udp_sender() {
-                        let _ = sender.send_trade(trade.clone());
+                        let _ = sender.send_trade_data(trade.clone());
                         // println!("Binance: Sent single-port UDP for {} trade at price {}", trade.symbol, trade.price);
                     }
                 }
             } else {
                 // Use original single-port sender
                 if let Some(sender) = crate::core::get_binary_udp_sender() {
-                    let _ = sender.send_trade(trade.clone());
+                    let _ = sender.send_trade_data(trade.clone());
                     // println!("Binance: Sent UDP packet for {} trade at price {}", trade.symbol, trade.price);
                 }
             }
@@ -605,19 +582,13 @@ fn process_binance_message(
                 // Send UDP packet using multi-port sender if enabled, fallback to single-port
                 if USE_MULTI_PORT_UDP {
                     if let Some(sender) = &multi_port_sender {
-                        let _ = sender.send_orderbook(
-                            "binance",
-                            &orderbook.symbol,
-                            &orderbook.bids,
-                            &orderbook.asks,
-                            orderbook.timestamp as u64 * 1_000_000, // ms to ns
-                        );
+                        let _ = sender.send_orderbook_data(orderbook.clone());
                         // println!("Binance: Sent multi-port UDP for {} orderbook with {} bids, {} asks",
                         //     orderbook.symbol, orderbook.bids.len(), orderbook.asks.len());
                     } else {
                         // Fallback to single-port
                         if let Some(sender) = crate::core::get_binary_udp_sender() {
-                            let _ = sender.send_orderbook(orderbook.clone());
+                            let _ = sender.send_orderbook_data(orderbook.clone());
                             // println!("Binance: Sent single-port UDP for {} orderbook with {} bids, {} asks",
                             //     orderbook.symbol, orderbook.bids.len(), orderbook.asks.len());
                         }
@@ -625,7 +596,7 @@ fn process_binance_message(
                 } else {
                     // Use original single-port sender
                     if let Some(sender) = crate::core::get_binary_udp_sender() {
-                        let _ = sender.send_orderbook(orderbook.clone());
+                        let _ = sender.send_orderbook_data(orderbook.clone());
                         // println!("Binance: Sent UDP packet for {} orderbook with {} bids, {} asks",
                         //     orderbook.symbol, orderbook.bids.len(), orderbook.asks.len());
                     }

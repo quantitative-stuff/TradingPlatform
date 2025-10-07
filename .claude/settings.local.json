@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(for file in config/crypto/*_config_full.json)",
-      "Bash(done)"
+      "Bash(done)",
+      "Bash(cargo build:*)"
     ],
     "deny": [],
     "ask": []

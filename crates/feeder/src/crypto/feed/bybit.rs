@@ -537,7 +537,7 @@ fn process_bybit_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_typ
             // Send UDP packet immediately using binary sender (90% smaller packets!)
             debug!("Bybit: Receiving orderbook data for {}", orderbook.symbol);
             if let Some(sender) = crate::core::get_binary_udp_sender() {
-                let _ = sender.send_orderbook(orderbook.clone());
+                let _ = sender.send_orderbook_data(orderbook.clone());
                 debug!("Bybit: Sent UDP packet for {} orderbook with {} bids, {} asks",
                     orderbook.symbol, orderbook.bids.len(), orderbook.asks.len());
             }
@@ -601,7 +601,7 @@ fn process_bybit_trade(trade_data: &Value, symbol_mapper: &Arc<SymbolMapper>, as
     
     // Send UDP packet immediately using binary sender (90% smaller packets!)
     if let Some(sender) = crate::core::get_binary_udp_sender() {
-        let _ = sender.send_trade(trade);
+        let _ = sender.send_trade_data(trade);
     }
     
     crate::core::COMPARE_NOTIFY.notify_waiters();

@@ -1,3 +1,3 @@
 {
-  "exchanges": ["binance"]
+  "exchanges": ["binance", "bybit", "coinbase", "deribit", "okx", "upbit", "bithumb"]
 }

@@ -10,10 +10,11 @@ use tokio::net::UdpSocket;
 use tokio::task::JoinHandle;
 use std::net::Ipv4Addr;
 use anyhow::{Result, Context};
-use tracing::{info, error, warn};
+use tracing::{info, error};
 use std::sync::Arc;
 use parking_lot::RwLock;
 use std::collections::HashMap;
+use socket2::{Socket, Domain, Type, Protocol};
 
 /// Exchange configuration matching sender
 #[derive(Debug, Clone, Copy)]
@@ -34,7 +35,7 @@ const EXCHANGES: [ExchangeConfig; 7] = [
 ];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum DataType {
+pub enum DataType {
     Trade,
     OrderBook,
 }
@@ -118,9 +119,20 @@ impl MultiPortUdpReceiver {
         };
         let port = base_port + port_offset as u16;
 
-        let socket = UdpSocket::bind(format!("0.0.0.0:{}", port))
-            .await
-            .with_context(|| format!("Failed to bind to port {}", port))?;
+        // Use socket2 for buffer size control
+        let socket2 = Socket::new(Domain::IPV4, Type::DGRAM, Some(Protocol::UDP))
+            .with_context(|| format!("Failed to create socket for port {}", port))?;
+
+        socket2.set_recv_buffer_size(4 * 1024 * 1024)?; // 4MB buffer
+        socket2.set_reuse_address(true)?;
+
+        let bind_addr: std::net::SocketAddr = format!("0.0.0.0:{}", port).parse().unwrap();
+        socket2.bind(&bind_addr.into())?;
+
+        // Convert to tokio UdpSocket
+        socket2.set_nonblocking(true)?;
+        let std_socket: std::net::UdpSocket = socket2.into();
+        let socket = UdpSocket::from_std(std_socket)?;
 
         let multicast_ip: Ipv4Addr = multicast_addr.parse()
             .with_context(|| format!("Invalid multicast address: {}", multicast_addr))?;
@@ -129,7 +141,6 @@ impl MultiPortUdpReceiver {
             .with_context(|| format!("Failed to join multicast {}", multicast_addr))?;
 
         socket.set_multicast_loop_v4(false)?;
-        socket.set_recv_buffer_size(4 * 1024 * 1024)?; // 4MB buffer
 
         let receiver_id = format!(
             "{}_{}_{}",
@@ -179,10 +190,12 @@ impl MultiPortUdpReceiver {
                     }
                     Err(e) => {
                         error!("Receiver {} error: {}", receiver_id, e);
-                        let mut stats_map = stats.write();
-                        if let Some(stat) = stats_map.get_mut(&receiver_id) {
-                            stat.errors += 1;
-                        }
+                        {
+                            let mut stats_map = stats.write();
+                            if let Some(stat) = stats_map.get_mut(&receiver_id) {
+                                stat.errors += 1;
+                            }
+                        } // Drop lock before await
                         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
                     }
                 }

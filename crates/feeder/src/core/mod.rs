@@ -200,9 +200,6 @@ pub use symbol_mapper_cache::{
 };
 pub use multi_port_udp_sender::{
     MultiPortUdpSender,
-    MultiPortConfig,
-    PartitionStrategy,
-    MultiPortStats,
     init_global_multi_port_sender,
     get_multi_port_sender,
 };

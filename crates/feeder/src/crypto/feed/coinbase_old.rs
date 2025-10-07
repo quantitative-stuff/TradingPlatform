@@ -349,7 +349,7 @@ fn process_coinbase_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_
                 }
                 
                 if let Some(sender) = crate::core::get_binary_udp_sender() {
-                    let _ = sender.send_trade(trade);
+                    let _ = sender.send_trade_data(trade);
                 }
                 
                 crate::core::COMPARE_NOTIFY.notify_waiters();
@@ -401,7 +401,7 @@ fn process_coinbase_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_
                 }
 
                 if let Some(sender) = crate::core::get_binary_udp_sender() {
-                    let _ = sender.send_orderbook(orderbook);
+                    let _ = sender.send_orderbook_data(orderbook);
                 }
                 
                 crate::core::COMPARE_NOTIFY.notify_waiters();
@@ -464,7 +464,7 @@ fn process_coinbase_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_
                     }
 
                     if let Some(sender) = crate::core::get_binary_udp_sender() {
-                        let _ = sender.send_orderbook(orderbook.clone());
+                        let _ = sender.send_orderbook_data(orderbook.clone());
                     }
                     
                     crate::core::COMPARE_NOTIFY.notify_waiters();

@@ -271,7 +271,7 @@ impl LSExchange {
             if let Some(sender) = get_optimized_udp_sender() {
                 match &market_data.data_type {
                     MarketDataType::OrderBook(orderbook) => {
-                        match sender.send_orderbook(orderbook.clone()) {
+                        match sender.send_orderbook_data(orderbook.clone()) {
                             Ok(_) => {
                                 // Debug: Show UDP send success
                                 static UDP_COUNT: AtomicUsize = AtomicUsize::new(0);
@@ -319,7 +319,7 @@ impl LSExchange {
             if let Some(sender) = get_optimized_udp_sender() {
                 match &market_data.data_type {
                     MarketDataType::Trade(trade) => {
-                        match sender.send_trade(trade.clone()) {
+                        match sender.send_trade_data(trade.clone()) {
                             Ok(_) => {
                                 // Uncomment to debug
                                 // debug!("Sent trade for {} via UDP", trade.symbol);

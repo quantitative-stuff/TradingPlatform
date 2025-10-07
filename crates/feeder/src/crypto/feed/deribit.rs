@@ -362,7 +362,7 @@ fn process_deribit_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_t
                                 }
                                 
                                 if let Some(sender) = crate::core::get_binary_udp_sender() {
-                                    let _ = sender.send_trade(trade);
+                                    let _ = sender.send_trade_data(trade);
                                 }
                                 
                                 crate::core::COMPARE_NOTIFY.notify_waiters();
@@ -401,7 +401,7 @@ fn process_deribit_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_t
                                 }
 
                                 if let Some(sender) = crate::core::get_binary_udp_sender() {
-                                    let _ = sender.send_trade(trade);
+                                    let _ = sender.send_trade_data(trade);
                                 }
 
                                 crate::core::COMPARE_NOTIFY.notify_waiters();
@@ -488,7 +488,7 @@ fn process_deribit_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_t
                             orderbook.asks.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
 
                             if let Some(sender) = crate::core::get_binary_udp_sender() {
-                                let _ = sender.send_orderbook(orderbook.clone());
+                                let _ = sender.send_orderbook_data(orderbook.clone());
                             }
                             
                             crate::core::COMPARE_NOTIFY.notify_waiters();

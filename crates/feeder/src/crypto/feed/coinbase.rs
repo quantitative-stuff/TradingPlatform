@@ -360,7 +360,7 @@ fn process_coinbase_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_
                 }
 
                 if let Some(sender) = crate::core::get_binary_udp_sender() {
-                    let _ = sender.send_trade(trade.clone());
+                    let _ = sender.send_trade_data(trade.clone());
                     if count % 100 == 0 {
                         debug!("Coinbase: Sent UDP packet for {} trade at price {}", trade.symbol, trade.price);
                     }
@@ -417,7 +417,7 @@ fn process_coinbase_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_
                 }
 
                 if let Some(sender) = crate::core::get_binary_udp_sender() {
-                    let _ = sender.send_orderbook(orderbook.clone());
+                    let _ = sender.send_orderbook_data(orderbook.clone());
                     if count % 100 == 0 {
                         debug!("Coinbase: Sent UDP packet for {} orderbook with {} bids, {} asks",
                             orderbook.symbol, orderbook.bids.len(), orderbook.asks.len());
@@ -484,7 +484,7 @@ fn process_coinbase_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_
                     }
 
                     if let Some(sender) = crate::core::get_binary_udp_sender() {
-                        let _ = sender.send_orderbook(orderbook.clone());
+                        let _ = sender.send_orderbook_data(orderbook.clone());
                         if count % 100 == 0 {
                             debug!("Coinbase: Sent UDP packet for {} orderbook update with {} bids, {} asks",
                                 orderbook.symbol, orderbook.bids.len(), orderbook.asks.len());

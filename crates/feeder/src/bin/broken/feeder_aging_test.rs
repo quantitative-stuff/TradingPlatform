@@ -9,7 +9,7 @@ use tokio::task::JoinHandle;
 use std::time::Duration;
 
 // Feeder imports
-use feeder::core::{SymbolMapper, init_global_ordered_udp_sender, get_ordered_udp_sender, trigger_shutdown, CONNECTION_STATS};
+use feeder::core::{SymbolMapper, init_global_ordered_udp_sender, get_ordered_udp_sender, init_global_multi_port_sender, get_multi_port_sender, trigger_shutdown, CONNECTION_STATS};
 use feeder::core::spawning::*;
 use feeder::connect_to_databse::{QuestDBClient, QuestDBConfig};
 use tracing::{info, warn, error};
@@ -161,6 +161,13 @@ async fn run_feeder_task(config: Config) -> Result<Vec<JoinHandle<()>>> {
         anyhow::bail!("Failed to initialize UDP sender");
     }
     info!("✅ Buffered UDP sender initialized for aging test.");
+
+    // Initialize multi-port UDP sender for proportional load distribution
+    if let Err(e) = init_global_multi_port_sender() {
+        error!("Failed to initialize multi-port UDP sender: {}", e);
+        anyhow::bail!("Failed to initialize multi-port UDP sender");
+    }
+    info!("✅ Multi-Port UDP sender initialized (20 addresses: Binance 40%, others 10%)");
 
     info!("✅ Feeder task running with {} exchanges.", all_handles.len());
     Ok(all_handles)

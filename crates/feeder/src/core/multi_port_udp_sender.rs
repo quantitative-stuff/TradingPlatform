@@ -24,7 +24,7 @@
 /// - Coinbase: 239.10.6.1:9000 (trade), 239.10.6.1:9100 (orderbook)
 /// - Bithumb: 239.10.7.1:9000 (trade), 239.10.7.1:9100 (orderbook)
 
-use crate::core::BinaryUdpPacket;
+use crate::core::{BinaryUdpPacket, TradeData, OrderBookData};
 use std::net::UdpSocket;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -33,6 +33,7 @@ use anyhow::{Result, Context};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use tracing::{info, warn};
+use socket2::{Socket, Domain, Type, Protocol};
 
 /// Exchange configuration
 #[derive(Debug, Clone, Copy)]
@@ -96,15 +97,23 @@ impl AddressPool {
             let port = base_port + i as u16;
             let target_addr = format!("{}:{}", base_addr, port);
 
-            let socket = UdpSocket::bind("0.0.0.0:0")
-                .with_context(|| format!("Failed to bind for {}", target_addr))?;
+            // Use socket2 for advanced socket options
+            let socket2 = Socket::new(Domain::IPV4, Type::DGRAM, Some(Protocol::UDP))
+                .with_context(|| format!("Failed to create socket for {}", target_addr))?;
+
+            socket2.set_send_buffer_size(2 * 1024 * 1024)?; // 2MB buffer
+            socket2.set_multicast_ttl_v4(1)?;
+            socket2.set_multicast_loop_v4(false)?;
+
+            // Bind to any port
+            let bind_addr: std::net::SocketAddr = "0.0.0.0:0".parse().unwrap();
+            socket2.bind(&bind_addr.into())?;
+
+            // Convert to std::net::UdpSocket
+            let socket: UdpSocket = socket2.into();
 
             socket.connect(&target_addr)
                 .with_context(|| format!("Failed to connect to {}", target_addr))?;
-
-            socket.set_multicast_ttl_v4(1)?;
-            socket.set_multicast_loop_v4(false)?;
-            socket.set_send_buffer_size(2 * 1024 * 1024)?; // 2MB buffer
 
             sockets.push(socket);
         }
@@ -216,6 +225,29 @@ impl MultiPortUdpSender {
 
     pub fn get_total_packets(&self) -> u64 {
         self.pools.values().map(|p| p.read().get_stats().0).sum()
+    }
+
+    /// Helper: Send trade (accepts TradeData struct)
+    pub fn send_trade_data(&self, trade: TradeData) -> Result<()> {
+        let mut packet = BinaryUdpPacket::from_trade(&trade);
+        self.send_packet(packet)
+    }
+
+    /// Helper: Send orderbook (accepts OrderBookData struct)
+    pub fn send_orderbook_data(&self, orderbook: OrderBookData) -> Result<()> {
+        // Send bids
+        if !orderbook.bids.is_empty() {
+            let bid_packet = BinaryUdpPacket::from_orderbook(&orderbook, true);
+            self.send_packet(bid_packet)?;
+        }
+
+        // Send asks
+        if !orderbook.asks.is_empty() {
+            let ask_packet = BinaryUdpPacket::from_orderbook(&orderbook, false);
+            self.send_packet(ask_packet)?;
+        }
+
+        Ok(())
     }
 
     pub fn print_stats(&self) {

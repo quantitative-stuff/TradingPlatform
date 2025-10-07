@@ -7,7 +7,7 @@ use std::sync::Arc;
 use serde_json::Value;
 use tokio::sync::RwLock;
 
-use feeder::core::{Feeder, SymbolMapper, CONNECTION_STATS, FileLogger, init_global_binary_udp_sender, get_binary_udp_sender, trigger_shutdown, init_feeder_logger};
+use feeder::core::{Feeder, SymbolMapper, CONNECTION_STATS, FileLogger, init_global_binary_udp_sender, get_binary_udp_sender, init_global_multi_port_sender, get_multi_port_sender, trigger_shutdown, init_feeder_logger};
 use feeder::core::spawning::*;
 use feeder::crypto::feed::{BinanceExchange, BybitExchange, UpbitExchange, CoinbaseExchange, OkxExchange, DeribitExchange, BithumbExchange};
 use feeder::load_config::ExchangeConfig;
@@ -40,7 +40,7 @@ async fn run_feeder_direct() -> Result<()> {
     }
 
     // Read exchanges from config file
-    let config_file = std::fs::File::open("config/crypto/crypto_exchanges.json")?;
+    let config_file = std::fs::File::open("config/feeder/crypto/crypto_exchanges.json")?;
     let config: serde_json::Value = serde_json::from_reader(config_file)?;
     let selected_exchanges: Vec<String> = config["exchanges"]
         .as_array()
@@ -50,19 +50,20 @@ async fn run_feeder_direct() -> Result<()> {
         .collect();
 
     if selected_exchanges.is_empty() {
-        error!("No exchanges specified in config/crypto/crypto_exchanges.json");
+        error!("No exchanges specified in config/feeder/crypto/crypto_exchanges.json");
         return Err(anyhow::anyhow!("No exchanges specified"));
     }
 
     info!("Starting direct feeder with exchanges: {:?}", selected_exchanges);
 
     // Set up config directory for exchange configs
-    let config_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| ".".to_string()))
-        .join("config")
+    // Config files are in workspace root at config/feeder/crypto/
+    let config_dir = PathBuf::from("config")
+        .join("feeder")
         .join("crypto");
 
-    // Load symbol mapper directly from config/crypto/symbol_mapping.json
-    let symbol_mapper_path = "config/crypto/symbol_mapping.json";
+    // Load symbol mapper directly from config/feeder/crypto/symbol_mapping.json
+    let symbol_mapper_path = "config/feeder/crypto/symbol_mapping.json";
     if !PathBuf::from(symbol_mapper_path).exists() {
         error!("Symbol mapping file not found: {}", symbol_mapper_path);
         return Err(anyhow::anyhow!("symbol_mapping.json not found at {}", symbol_mapper_path));
@@ -233,6 +234,13 @@ async fn run_feeder_direct() -> Result<()> {
         return Err(anyhow::anyhow!("Failed to initialize binary UDP sender"));
     }
     info!("✅ Binary UDP sender initialized (66-byte headers + binary payload)");
+
+    // Initialize MULTI-PORT UDP sender (proportional 20-address architecture)
+    if let Err(e) = init_global_multi_port_sender() {
+        error!("Failed to initialize multi-port UDP sender: {}", e);
+        return Err(anyhow::anyhow!("Failed to initialize multi-port UDP sender"));
+    }
+    info!("✅ Multi-Port UDP sender initialized (20 addresses: Binance 40%, others 10% each)");
 
     // Send startup notification
     if let Some(sender) = get_binary_udp_sender() {

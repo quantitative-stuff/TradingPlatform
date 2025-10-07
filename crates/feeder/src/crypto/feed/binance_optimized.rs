@@ -14,7 +14,7 @@ use crate::core::{
     Feeder, TRADES, ORDERBOOKS, COMPARE_NOTIFY, TradeData, OrderBookData,
     SymbolMapper, get_shutdown_receiver, CONNECTION_STATS,
     FastJsonParser, get_str, get_u64,
-    MultiPortUdpSender, MultiPortConfig, PartitionStrategy,
+    MultiPortUdpSender, get_multi_port_sender,
 };
 use crate::core::robust_connection::ExchangeConnectionLimits;
 use crate::error::{Result, Error};
@@ -66,19 +66,8 @@ impl BinanceOptimizedExchange {
             }
         }
 
-        // Initialize multi-port UDP sender
-        let udp_sender = MultiPortConfig {
-            base_address: "239.0.0.1".to_string(),
-            base_port: 9001,
-            num_ports: 4,
-            strategy: PartitionStrategy::SymbolHash,
-        };
-
-        let sender = MultiPortUdpSender::new(udp_sender).ok().map(Arc::new);
-
-        if sender.is_some() {
-            info!("Binance: Initialized multi-port UDP sender (ports 9001-9004)");
-        }
+        // Use global multi-port UDP sender (initialized in feeder_direct)
+        let sender = get_multi_port_sender();
 
         Self {
             config,
