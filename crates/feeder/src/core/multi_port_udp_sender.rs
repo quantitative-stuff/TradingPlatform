@@ -83,16 +83,6 @@ impl AddressPool {
 
         let mut sockets = Vec::with_capacity(port_count);
 
-        info!(
-            "Creating {} pool for {}: {} ports",
-            match data_type {
-                DataType::Trade => "Trade",
-                DataType::OrderBook => "OrderBook",
-            },
-            config.name,
-            port_count
-        );
-
         for i in 0..port_count {
             let port = base_port + i as u16;
             let target_addr = format!("{}:{}", base_addr, port);
@@ -117,18 +107,6 @@ impl AddressPool {
 
             sockets.push(socket);
         }
-
-        info!(
-            "✅ {} {} pool: {} ports {}-{}",
-            config.name,
-            match data_type {
-                DataType::Trade => "Trade",
-                DataType::OrderBook => "OrderBook",
-            },
-            base_addr,
-            base_port,
-            base_port + port_count as u16 - 1
-        );
 
         Ok(AddressPool {
             exchange_name: config.name.to_string(),

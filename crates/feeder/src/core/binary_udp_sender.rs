@@ -155,8 +155,6 @@ impl BinaryUdpSender {
         for packet in packets.drain(..) {
             match packet {
                 BinaryUdpMessage::Trade(trade) => {
-                    println!("UDP Sender: Processing trade for {} @ {} x {}",
-                         trade.symbol, trade.price, trade.quantity);
                     // Create binary trade packet
                     let mut binary_packet = crate::core::BinaryUdpPacket::from_trade(&trade);
                     let packet_bytes = binary_packet.to_bytes();
@@ -174,8 +172,6 @@ impl BinaryUdpSender {
                     }
                 }
                 BinaryUdpMessage::OrderBook(orderbook) => {
-                    println!("UDP Sender: Processing orderbook for {} with {} bids and {} asks",
-                         orderbook.symbol, orderbook.bids.len(), orderbook.asks.len());
                     // Send separate packets for bids and asks
                     if !orderbook.bids.is_empty() {
                         let mut bids_packet = crate::core::BinaryUdpPacket::from_orderbook(&orderbook, true);
@@ -185,7 +181,7 @@ impl BinaryUdpSender {
                             match socket.send_to(&packet_bytes, target).await {
                                 Ok(sent) => {
                                     bytes_sent += sent;
-                                    info!("Sent binary orderbook bids packet: {} bytes for {}", sent, orderbook.symbol);
+                                    debug!("Sent binary orderbook bids packet: {} bytes for {}", sent, orderbook.symbol);
                                 }
                                 Err(e) => warn!("Failed to send binary bids packet: {}", e),
                             }
@@ -200,7 +196,7 @@ impl BinaryUdpSender {
                             match socket.send_to(&packet_bytes, target).await {
                                 Ok(sent) => {
                                     bytes_sent += sent;
-                                    info!("Sent binary orderbook asks packet: {} bytes for {}", sent, orderbook.symbol);
+                                    debug!("Sent binary orderbook asks packet: {} bytes for {}", sent, orderbook.symbol);
                                 }
                                 Err(e) => warn!("Failed to send binary asks packet: {}", e),
                             }

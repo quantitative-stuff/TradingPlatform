@@ -10,7 +10,7 @@
 use feeder::core::multi_port_udp_receiver::{MultiPortUdpReceiver, DataType};
 use feeder::core::binary_udp_packet::{PacketHeader, OrderBookItem, TradeItem};
 use tokio::signal;
-use tracing::{info, error, warn};
+use tracing::{info, error, warn, debug};
 use std::time::Duration;
 
 #[tokio::main]
@@ -50,7 +50,7 @@ async fn main() -> anyhow::Result<()> {
         match data_type {
             DataType::Trade => {
                 if let Some(trade) = parse_trade_packet(&data, &header) {
-                    info!(
+                    debug!(
                         "[{}] Trade: {} @ ${:.2} x {:.4}",
                         exchange,
                         parse_string(&header.symbol),
@@ -61,7 +61,7 @@ async fn main() -> anyhow::Result<()> {
             }
             DataType::OrderBook => {
                 if let Some(levels) = parse_orderbook_packet(&data, &header) {
-                    info!(
+                    debug!(
                         "[{}] OrderBook: {} - {} levels ({})",
                         exchange,
                         parse_string(&header.symbol),

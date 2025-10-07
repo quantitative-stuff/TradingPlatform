@@ -212,11 +212,11 @@ impl MultiPortUdpReceiver {
 
     /// Print statistics
     pub fn print_stats(&self) {
-        println!("\n╔══════════════════════════════════════════════════════╗");
-        println!("║  Multi-Port UDP Receiver Statistics                 ║");
-        println!("╠══════════════════════════════════════════════════════╣");
-        println!("║  Active Receivers: {}                                ║", self.handles.len());
-        println!("╚══════════════════════════════════════════════════════╝\n");
+        info!("\n╔══════════════════════════════════════════════════════╗");
+        info!("║  Multi-Port UDP Receiver Statistics                 ║");
+        info!("╠══════════════════════════════════════════════════════╣");
+        info!("║  Active Receivers: {}                                ║", self.handles.len());
+        info!("╚══════════════════════════════════════════════════════╝\n");
 
         let stats = self.stats.read();
         let mut total_packets = 0u64;
@@ -227,7 +227,7 @@ impl MultiPortUdpReceiver {
             let mut exchange_packets = 0u64;
             let mut exchange_bytes = 0u64;
 
-            println!("┌─ {} ─────", exchange.name.to_uppercase());
+            info!("┌─ {} ─────", exchange.name.to_uppercase());
 
             for data_type_name in &["trade", "orderbook"] {
                 let port_count = if exchange.id == 1 { 4 } else { 1 };
@@ -236,7 +236,7 @@ impl MultiPortUdpReceiver {
                     let key = format!("{}_{}_{}", exchange.name, data_type_name, i);
                     if let Some(stat) = stats.get(&key) {
                         if stat.packets_received > 0 {
-                            println!(
+                            info!(
                                 "│  {}: {} pkts, {} bytes",
                                 key,
                                 stat.packets_received,
@@ -251,24 +251,24 @@ impl MultiPortUdpReceiver {
             }
 
             if exchange_packets > 0 {
-                println!("│  Total: {} packets, {} bytes\n", exchange_packets, exchange_bytes);
+                info!("│  Total: {} packets, {} bytes\n", exchange_packets, exchange_bytes);
             } else {
-                println!("│  No data received\n");
+                info!("│  No data received\n");
             }
 
             total_packets += exchange_packets;
             total_bytes += exchange_bytes;
         }
 
-        println!("╔══════════════════════════════════════════════════════╗");
-        println!("║  TOTAL: {} packets, {} MB               ║",
+        info!("╔══════════════════════════════════════════════════════╗");
+        info!("║  TOTAL: {} packets, {} MB               ║",
             total_packets,
             total_bytes / 1_000_000
         );
         if total_errors > 0 {
-            println!("║  Errors: {}                                        ║", total_errors);
+            info!("║  Errors: {}                                        ║", total_errors);
         }
-        println!("╚══════════════════════════════════════════════════════╝\n");
+        info!("╚══════════════════════════════════════════════════════╝\n");
     }
 
     /// Wait for all receivers to complete (runs forever unless aborted)
