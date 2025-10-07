@@ -102,7 +102,7 @@ impl AddressPool {
                 .with_context(|| format!("Failed to create socket for {}", target_addr))?;
 
             socket2.set_send_buffer_size(2 * 1024 * 1024)?; // 2MB buffer
-            socket2.set_multicast_ttl_v4(1)?;
+            socket2.set_multicast_ttl_v4(32)?; // Cross-machine capable
             socket2.set_multicast_loop_v4(false)?;
 
             // Bind to any port

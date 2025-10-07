@@ -42,10 +42,11 @@ impl BinaryUdpSender {
         let socket = UdpSocket::bind(bind_addr).await?;
 
         // Configure socket for multicast if needed
-        if target_addr.starts_with("239.") {
+        if target_addr.starts_with("239.") || target_addr.starts_with("224.") {
             // Multicast setup
-            socket.set_broadcast(true)?;
-            info!("Configured for multicast to {}", target_addr);
+            socket.set_multicast_ttl_v4(32)?; // Cross-machine capable
+            socket.set_multicast_loop_v4(false)?;
+            info!("Configured for multicast to {} (TTL=32)", target_addr);
         }
 
         let socket = Arc::new(socket);

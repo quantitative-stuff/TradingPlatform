@@ -427,7 +427,7 @@ fn process_bithumb_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_t
                     trades.push(trade.clone());
                 }
 
-                if let Some(sender) = crate::core::get_binary_udp_sender() {
+                if let Some(sender) = crate::core::get_multi_port_sender() {
                     let _ = sender.send_trade_data(trade.clone());
                     if count % 100 == 0 {
                         debug!("Bithumb: Sent UDP packet for {} trade at price {}", trade.symbol, trade.price);
@@ -498,7 +498,7 @@ fn process_bithumb_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_t
                     }
 
                     // Send UDP packet for orderbook
-                    if let Some(sender) = crate::core::get_binary_udp_sender() {
+                    if let Some(sender) = crate::core::get_multi_port_sender() {
                         let _ = sender.send_orderbook_data(orderbook);
                     }
                 }

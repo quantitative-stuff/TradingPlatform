@@ -405,7 +405,7 @@ fn process_upbit_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_typ
             }
 
             // Send UDP packet immediately using binary sender (90% smaller packets!)
-            if let Some(sender) = crate::core::get_binary_udp_sender() {
+            if let Some(sender) = crate::core::get_multi_port_sender() {
                 let _ = sender.send_trade_data(trade);
             }
             
@@ -466,7 +466,7 @@ fn process_upbit_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_typ
                 }
 
                 // Send UDP packet immediately using binary sender (90% smaller packets!)
-                if let Some(sender) = crate::core::get_binary_udp_sender() {
+                if let Some(sender) = crate::core::get_multi_port_sender() {
                     let _ = sender.send_orderbook_data(orderbook);
                 }
                 

@@ -3,7 +3,10 @@
     "allow": [
       "Bash(for file in config/crypto/*_config_full.json)",
       "Bash(done)",
-      "Bash(cargo build:*)"
+      "Bash(cargo build:*)",
+      "Bash(for:*)",
+      "Bash(do)",
+      "Bash(echo:*)"
     ],
     "deny": [],
     "ask": []
