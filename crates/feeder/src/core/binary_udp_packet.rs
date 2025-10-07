@@ -214,8 +214,14 @@ impl BinaryUdpPacket {
     pub fn from_trade(trade: &TradeData) -> Self {
         let mut packet = BinaryUdpPacket::new();
 
-        // Set header
-        packet.header.exchange_timestamp = (trade.timestamp * 1_000_000) as u64; // Convert ms to ns
+        // Set header - handle timestamp conversion safely
+        // If timestamp is already in nanoseconds (> 1e15), use as-is
+        // If in milliseconds (< 1e13), convert to nanoseconds
+        packet.header.exchange_timestamp = if trade.timestamp > 1_000_000_000_000_000 {
+            trade.timestamp as u64 // Already in nanoseconds
+        } else {
+            (trade.timestamp.saturating_mul(1_000_000)) as u64 // Convert ms to ns with overflow protection
+        };
         packet.header.local_timestamp = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
@@ -249,8 +255,14 @@ impl BinaryUdpPacket {
     pub fn from_orderbook(orderbook: &OrderBookData, is_bid: bool) -> Self {
         let mut packet = BinaryUdpPacket::new();
 
-        // Set header
-        packet.header.exchange_timestamp = (orderbook.timestamp * 1_000_000) as u64; // Convert ms to ns
+        // Set header - handle timestamp conversion safely
+        // If timestamp is already in nanoseconds (> 1e15), use as-is
+        // If in milliseconds (< 1e13), convert to nanoseconds
+        packet.header.exchange_timestamp = if orderbook.timestamp > 1_000_000_000_000_000 {
+            orderbook.timestamp as u64 // Already in nanoseconds
+        } else {
+            (orderbook.timestamp.saturating_mul(1_000_000)) as u64 // Convert ms to ns with overflow protection
+        };
         packet.header.local_timestamp = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
