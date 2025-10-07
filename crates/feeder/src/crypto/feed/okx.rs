@@ -6,7 +6,7 @@ use tracing::{debug, info, warn, error};
 use super::websocket_config::connect_with_large_buffer;
 use chrono;
 
-use crate::core::{Feeder, TRADES, ORDERBOOKS, COMPARE_NOTIFY, TradeData, OrderBookData, SymbolMapper, get_shutdown_receiver, CONNECTION_STATS};
+use crate::core::{Feeder, TRADES, ORDERBOOKS, COMPARE_NOTIFY, TradeData, OrderBookData, SymbolMapper, get_shutdown_receiver, CONNECTION_STATS, get_multi_port_sender};
 use crate::core::robust_connection::ExchangeConnectionLimits;
 use crate::error::{Result, Error};
 use crate::load_config::ExchangeConfig;
@@ -15,6 +15,8 @@ use std::time::Duration;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
+
+const USE_MULTI_PORT_UDP: bool = true;
 
 pub struct OkxExchange {
     config: ExchangeConfig,
@@ -443,11 +445,23 @@ fn process_okx_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_type:
                                 trades.push(trade.clone());
                             }
 
-                            // Send UDP packet immediately
-                            if let Some(sender) = crate::core::get_binary_udp_sender() {
-                                let _ = sender.send_trade_data(trade.clone());
-                                debug!("OKX: Sent UDP packet for {} trade at price {}", trade.symbol, trade.price);
+                            // Send UDP packet using multi-port sender if enabled, fallback to single-port
+                            if USE_MULTI_PORT_UDP {
+                                if let Some(sender) = get_multi_port_sender() {
+                                    let _ = sender.send_trade_data(trade.clone());
+                                } else {
+                                    // Fallback to single-port
+                                    if let Some(sender) = crate::core::get_binary_udp_sender() {
+                                        let _ = sender.send_trade_data(trade.clone());
+                                    }
+                                }
+                            } else {
+                                // Use original single-port sender
+                                if let Some(sender) = crate::core::get_binary_udp_sender() {
+                                    let _ = sender.send_trade_data(trade.clone());
+                                }
                             }
+                            debug!("OKX: Sent UDP packet for {} trade at price {}", trade.symbol, trade.price);
 
                             COMPARE_NOTIFY.notify_waiters();
                         }
@@ -516,12 +530,24 @@ fn process_okx_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_type:
                                 orderbooks.push(orderbook.clone());
                             }
 
-                            // Send UDP packet immediately
-                            if let Some(sender) = crate::core::get_binary_udp_sender() {
-                                let _ = sender.send_orderbook_data(orderbook.clone());
-                                debug!("OKX: Sent UDP packet for {} orderbook with {} bids, {} asks",
-                                    orderbook.symbol, orderbook.bids.len(), orderbook.asks.len());
+                            // Send UDP packet using multi-port sender if enabled, fallback to single-port
+                            if USE_MULTI_PORT_UDP {
+                                if let Some(sender) = get_multi_port_sender() {
+                                    let _ = sender.send_orderbook_data(orderbook.clone());
+                                } else {
+                                    // Fallback to single-port
+                                    if let Some(sender) = crate::core::get_binary_udp_sender() {
+                                        let _ = sender.send_orderbook_data(orderbook.clone());
+                                    }
+                                }
+                            } else {
+                                // Use original single-port sender
+                                if let Some(sender) = crate::core::get_binary_udp_sender() {
+                                    let _ = sender.send_orderbook_data(orderbook.clone());
+                                }
                             }
+                            debug!("OKX: Sent UDP packet for {} orderbook with {} bids, {} asks",
+                                orderbook.symbol, orderbook.bids.len(), orderbook.asks.len());
 
                             COMPARE_NOTIFY.notify_waiters();
                         }

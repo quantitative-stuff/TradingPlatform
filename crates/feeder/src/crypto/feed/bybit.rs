@@ -10,10 +10,12 @@ use tracing::{debug, info, warn, error};
 use futures_util::future::FutureExt;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use crate::core::{Feeder, SymbolMapper, CONNECTION_STATS, get_shutdown_receiver};
+use crate::core::{Feeder, SymbolMapper, CONNECTION_STATS, get_shutdown_receiver, get_multi_port_sender};
 use crate::error::{Result, Error};
 use crate::load_config::ExchangeConfig;
 use crate::connect_to_databse::ConnectionEvent;
+
+const USE_MULTI_PORT_UDP: bool = true;
 
 pub struct BybitExchange {
     config: ExchangeConfig,
@@ -534,13 +536,25 @@ fn process_bybit_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_typ
                 // println!("[Bybit][{}] Orderbook stored. Now ORDERBOOKS count: {}", stream_type, orderbooks.len());
             }
             
-            // Send UDP packet immediately using binary sender (90% smaller packets!)
+            // Send UDP packet using multi-port sender if enabled, fallback to single-port
             debug!("Bybit: Receiving orderbook data for {}", orderbook.symbol);
-            if let Some(sender) = crate::core::get_binary_udp_sender() {
-                let _ = sender.send_orderbook_data(orderbook.clone());
-                debug!("Bybit: Sent UDP packet for {} orderbook with {} bids, {} asks",
-                    orderbook.symbol, orderbook.bids.len(), orderbook.asks.len());
+            if USE_MULTI_PORT_UDP {
+                if let Some(sender) = get_multi_port_sender() {
+                    let _ = sender.send_orderbook_data(orderbook.clone());
+                } else {
+                    // Fallback to single-port
+                    if let Some(sender) = crate::core::get_binary_udp_sender() {
+                        let _ = sender.send_orderbook_data(orderbook.clone());
+                    }
+                }
+            } else {
+                // Use original single-port sender
+                if let Some(sender) = crate::core::get_binary_udp_sender() {
+                    let _ = sender.send_orderbook_data(orderbook.clone());
+                }
             }
+            debug!("Bybit: Sent UDP packet for {} orderbook with {} bids, {} asks",
+                orderbook.symbol, orderbook.bids.len(), orderbook.asks.len());
             
             crate::core::COMPARE_NOTIFY.notify_waiters();
         } else {
@@ -598,10 +612,22 @@ fn process_bybit_trade(trade_data: &Value, symbol_mapper: &Arc<SymbolMapper>, as
         trades.push(trade.clone());
         // println!("[Bybit][{}] Trade stored. Now TRADES count: {}", stream_type, trades.len());
     }
-    
-    // Send UDP packet immediately using binary sender (90% smaller packets!)
-    if let Some(sender) = crate::core::get_binary_udp_sender() {
-        let _ = sender.send_trade_data(trade);
+
+    // Send UDP packet using multi-port sender if enabled, fallback to single-port
+    if USE_MULTI_PORT_UDP {
+        if let Some(sender) = get_multi_port_sender() {
+            let _ = sender.send_trade_data(trade);
+        } else {
+            // Fallback to single-port
+            if let Some(sender) = crate::core::get_binary_udp_sender() {
+                let _ = sender.send_trade_data(trade);
+            }
+        }
+    } else {
+        // Use original single-port sender
+        if let Some(sender) = crate::core::get_binary_udp_sender() {
+            let _ = sender.send_trade_data(trade);
+        }
     }
     
     crate::core::COMPARE_NOTIFY.notify_waiters();
