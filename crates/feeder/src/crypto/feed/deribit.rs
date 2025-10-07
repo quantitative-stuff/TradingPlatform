@@ -11,7 +11,7 @@ use tracing::{debug, info, warn, error};
 use futures_util::future::FutureExt;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use crate::core::{OrderBookData, Feeder, SymbolMapper, CONNECTION_STATS, get_shutdown_receiver};
+use crate::core::{OrderBookData, Feeder, SymbolMapper, CONNECTION_STATS, get_shutdown_receiver, parse_to_scaled_or_default};
 use crate::error::Result;
 use crate::load_config::ExchangeConfig;
 
@@ -163,7 +163,7 @@ impl Feeder for DeribitExchange {
 
         async fn start(&mut self) -> Result<()> {
         self.active_connections.store(0, Ordering::SeqCst);
-        
+
         for ((asset_type, chunk_idx), ws_stream_opt) in self.ws_streams.iter_mut() {
             if let Some(mut ws_stream) = ws_stream_opt.take() {
                 let asset_type = asset_type.clone();
@@ -171,7 +171,8 @@ impl Feeder for DeribitExchange {
                 let symbol_mapper = self.symbol_mapper.clone();
                 let active_connections = self.active_connections.clone();
                 let orderbooks = self.orderbooks.clone();
-                
+                let config = self.config.clone();
+
                 active_connections.fetch_add(1, Ordering::SeqCst);
 
                 tokio::spawn(async move {
@@ -219,7 +220,7 @@ impl Feeder for DeribitExchange {
                                 match msg {
                                     Some(Ok(Message::Text(text))) => {
                                         last_message_time = std::time::Instant::now();
-                                        process_deribit_message(&text, symbol_mapper.clone(), &asset_type, orderbooks.clone());
+                                        process_deribit_message(&text, symbol_mapper.clone(), &asset_type, orderbooks.clone(), &config);
                                     },
                                     Some(Ok(Message::Pong(_))) => {
                                         last_message_time = std::time::Instant::now();
@@ -305,7 +306,7 @@ impl Feeder for DeribitExchange {
     }
 }
 
-fn process_deribit_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_type: &str, orderbooks: Arc<parking_lot::RwLock<HashMap<String, OrderBookData>>>) {
+fn process_deribit_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_type: &str, orderbooks: Arc<parking_lot::RwLock<HashMap<String, OrderBookData>>>, config: &ExchangeConfig) {
     // Log all messages for debugging
     info!("[DERIBIT DEBUG] Received message: {}", text);
 
@@ -343,9 +344,19 @@ fn process_deribit_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_t
                                     }
                                 };
 
-                                let price = trade_data.get("price").and_then(Value::as_f64).unwrap_or_default();
-                                let quantity = trade_data.get("amount").and_then(Value::as_f64).unwrap_or_default();
-                                let timestamp = trade_data.get("timestamp").and_then(Value::as_i64).unwrap_or_default();
+                                // HFT: Get precision from config
+                                let price_precision = config.feed_config.get_price_precision(&common_symbol);
+                                let qty_precision = config.feed_config.get_quantity_precision(&common_symbol);
+
+                                // HFT: Parse directly to scaled i64 (NO f64!)
+                                // Deribit sends as JSON number (f64), so convert: (value * 10^precision) as i64
+                                let price = trade_data.get("price").and_then(Value::as_f64)
+                                    .map(|v| (v * 10_f64.powi(price_precision as i32)) as i64)
+                                    .unwrap_or(0);
+                                let quantity = trade_data.get("amount").and_then(Value::as_f64)
+                                    .map(|v| (v * 10_f64.powi(qty_precision as i32)) as i64)
+                                    .unwrap_or(0);
+                                let timestamp = trade_data.get("timestamp").and_then(Value::as_i64).unwrap_or_default().max(0) as u64;
 
                                 let trade = crate::core::TradeData {
                                     exchange: "Deribit".to_string(),
@@ -353,7 +364,10 @@ fn process_deribit_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_t
                                     asset_type: asset_type.to_string(),
                                     price,
                                     quantity,
+                                    price_precision,
+                                    quantity_precision: qty_precision,
                                     timestamp,
+                                    timestamp_unit: crate::load_config::TimestampUnit::Milliseconds,
                                 };
 
                                 {
@@ -380,19 +394,29 @@ fn process_deribit_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_t
                                 }
                             };
 
+                            // HFT: Get precision from config
+                            let price_precision = config.feed_config.get_price_precision(&common_symbol);
+                            let qty_precision = config.feed_config.get_quantity_precision(&common_symbol);
+
                             // Extract ticker data - last price, best bid/ask
                             if let Some(last_price) = data.get("last_price").and_then(Value::as_f64) {
-                                let timestamp = data.get("timestamp").and_then(Value::as_i64).unwrap_or_default();
-                                let quantity = data.get("stats").and_then(|s| s.get("volume")).and_then(Value::as_f64).unwrap_or(0.0);
+                                let timestamp = data.get("timestamp").and_then(Value::as_i64).unwrap_or_default().max(0) as u64;
+                                let quantity = data.get("stats").and_then(|s| s.get("volume")).and_then(Value::as_f64)
+                                    .map(|v| (v * 10_f64.powi(qty_precision as i32)) as i64)
+                                    .unwrap_or(0);
+                                let price = (last_price * 10_f64.powi(price_precision as i32)) as i64;
 
                                 // Create a trade from ticker's last price
                                 let trade = crate::core::TradeData {
                                     exchange: "Deribit".to_string(),
                                     symbol: common_symbol.clone(),
                                     asset_type: asset_type.to_string(),
-                                    price: last_price,
+                                    price,
                                     quantity,
+                                    price_precision,
+                                    quantity_precision: qty_precision,
                                     timestamp,
+                                    timestamp_unit: crate::load_config::TimestampUnit::Milliseconds,
                                 };
 
                                 {
@@ -418,7 +442,11 @@ fn process_deribit_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_t
                                 }
                             };
 
-                            let timestamp = data.get("timestamp").and_then(Value::as_i64).unwrap_or_default();
+                            // HFT: Get precision BEFORE parsing orderbook
+                            let price_precision = config.feed_config.get_price_precision(&common_symbol);
+                            let qty_precision = config.feed_config.get_quantity_precision(&common_symbol);
+
+                            let timestamp = data.get("timestamp").and_then(Value::as_i64).unwrap_or_default().max(0) as u64;
 
                             let mut orderbooks = orderbooks.write();
                             let orderbook = orderbooks.entry(common_symbol.clone()).or_insert_with(|| crate::core::OrderBookData {
@@ -427,7 +455,10 @@ fn process_deribit_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_t
                                 asset_type: asset_type.to_string(),
                                 bids: Vec::new(),
                                 asks: Vec::new(),
+                                price_precision,
+                                quantity_precision: qty_precision,
                                 timestamp: 0,
+                                timestamp_unit: crate::load_config::TimestampUnit::default(),
                             });
 
                             orderbook.timestamp = timestamp;
@@ -437,8 +468,12 @@ fn process_deribit_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_t
                                     if let Some(bid_arr) = bid.as_array() {
                                         if bid_arr.len() == 3 {
                                             let change_type = bid_arr[0].as_str().unwrap_or_default();
-                                            let price = bid_arr[1].as_f64().unwrap_or_default();
-                                            let quantity = bid_arr[2].as_f64().unwrap_or_default();
+                                            let price = bid_arr[1].as_f64()
+                                                .map(|v| (v * 10_f64.powi(price_precision as i32)) as i64)
+                                                .unwrap_or(0);
+                                            let quantity = bid_arr[2].as_f64()
+                                                .map(|v| (v * 10_f64.powi(qty_precision as i32)) as i64)
+                                                .unwrap_or(0);
 
                                             match change_type {
                                                 "new" | "change" => {
@@ -463,8 +498,12 @@ fn process_deribit_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_t
                                     if let Some(ask_arr) = ask.as_array() {
                                         if ask_arr.len() == 3 {
                                             let change_type = ask_arr[0].as_str().unwrap_or_default();
-                                            let price = ask_arr[1].as_f64().unwrap_or_default();
-                                            let quantity = ask_arr[2].as_f64().unwrap_or_default();
+                                            let price = ask_arr[1].as_f64()
+                                                .map(|v| (v * 10_f64.powi(price_precision as i32)) as i64)
+                                                .unwrap_or(0);
+                                            let quantity = ask_arr[2].as_f64()
+                                                .map(|v| (v * 10_f64.powi(qty_precision as i32)) as i64)
+                                                .unwrap_or(0);
 
                                             match change_type {
                                                 "new" | "change" => {
@@ -484,8 +523,8 @@ fn process_deribit_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_t
                                 }
                             }
 
-                            orderbook.bids.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap());
-                            orderbook.asks.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+                            orderbook.bids.sort_by(|a, b| b.0.cmp(&a.0));
+                            orderbook.asks.sort_by(|a, b| a.0.cmp(&b.0));
 
                             if let Some(sender) = crate::core::get_multi_port_sender() {
                                 let _ = sender.send_orderbook_data(orderbook.clone());

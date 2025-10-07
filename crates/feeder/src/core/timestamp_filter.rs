@@ -4,39 +4,39 @@ use std::time::{SystemTime, UNIX_EPOCH};
 /// Filter to distinguish real timestamps from sequence numbers or other data
 /// This is critical for Binance which sends mixed data in the timestamp field
 
-const MIN_VALID_TIMESTAMP: i64 = 1_000_000_000_000; // Jan 2001 in milliseconds
-const MAX_VALID_TIMESTAMP: i64 = 2_000_000_000_000; // May 2033 in milliseconds
+const MIN_VALID_TIMESTAMP: u64 = 1_000_000_000_000; // Jan 2001 in milliseconds
+const MAX_VALID_TIMESTAMP: u64 = 2_000_000_000_000; // May 2033 in milliseconds
 
 /// Check if a value is likely a timestamp vs sequence number
-pub fn is_valid_timestamp(value: i64, exchange: &str) -> bool {
+pub fn is_valid_timestamp(value: u64, exchange: &str) -> bool {
     // Get current time for validation
     let now_ms = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
-        .as_millis() as i64;
-    
+        .as_millis() as u64;
+
     // First check: digit count
-    let digit_count = if value <= 0 {
-        return false;
-    } else {
-        value.to_string().len()
-    };
-    
+    let digit_count = value.to_string().len();
+
     // Values with less than 10 digits are definitely not timestamps
     if digit_count < 10 {
-        debug!("{}: Value {} with {} digits is a sequence number, not timestamp", 
+        debug!("{}: Value {} with {} digits is a sequence number, not timestamp",
             exchange, value, digit_count);
         return false;
     }
-    
+
     // Check if it's seconds (10 digits) that need conversion
     if digit_count == 10 {
         // Convert to milliseconds for validation
         let as_millis = value * 1000;
         if as_millis >= MIN_VALID_TIMESTAMP && as_millis <= MAX_VALID_TIMESTAMP {
             // Further check: should be within reasonable range of current time
-            let diff_from_now = (as_millis - now_ms).abs();
-            let one_year_ms = 365 * 24 * 60 * 60 * 1000i64;
+            let diff_from_now = if as_millis > now_ms {
+                as_millis - now_ms
+            } else {
+                now_ms - as_millis
+            };
+            let one_year_ms = 365 * 24 * 60 * 60 * 1000u64;
             
             if diff_from_now < one_year_ms * 2 {
                 return true; // Valid timestamp in seconds
@@ -50,8 +50,12 @@ pub fn is_valid_timestamp(value: i64, exchange: &str) -> bool {
         // Check if within valid range
         if value >= MIN_VALID_TIMESTAMP && value <= MAX_VALID_TIMESTAMP {
             // Further check: should be within reasonable range of current time
-            let diff_from_now = (value - now_ms).abs();
-            let one_year_ms = 365 * 24 * 60 * 60 * 1000i64;
+            let diff_from_now = if value > now_ms {
+                value - now_ms
+            } else {
+                now_ms - value
+            };
+            let one_year_ms = 365 * 24 * 60 * 60 * 1000u64;
             
             if diff_from_now < one_year_ms * 2 {
                 return true; // Valid timestamp in milliseconds
@@ -74,15 +78,15 @@ pub fn is_valid_timestamp(value: i64, exchange: &str) -> bool {
 
 /// Process a value that might be timestamp or sequence number
 /// Returns (is_timestamp, normalized_value)
-pub fn process_timestamp_field(value: i64, exchange: &str) -> (bool, i64) {
+pub fn process_timestamp_field(value: u64, exchange: &str) -> (bool, u64) {
     if !is_valid_timestamp(value, exchange) {
         // It's a sequence number or invalid data
         return (false, value);
     }
-    
+
     // It's a valid timestamp - normalize it
     let digit_count = value.to_string().len();
-    
+
     let normalized = match digit_count {
         10 => value * 1000,        // Seconds to milliseconds
         13 => value,                // Already milliseconds
@@ -90,26 +94,26 @@ pub fn process_timestamp_field(value: i64, exchange: &str) -> (bool, i64) {
         19 => value / 1_000_000,    // Nanoseconds to milliseconds
         _ => value,
     };
-    
+
     (true, normalized)
 }
 
 /// Get current timestamp in milliseconds for packets that don't have valid timestamps
-pub fn get_current_timestamp_ms() -> i64 {
+pub fn get_current_timestamp_ms() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
-        .as_millis() as i64
+        .as_millis() as u64
 }
 
 /// Fix Binance-specific issues where sequence numbers are sent as timestamps
-pub fn fix_binance_timestamp(value: i64, symbol: &str) -> i64 {
+pub fn fix_binance_timestamp(value: u64, symbol: &str) -> u64 {
     let (is_timestamp, normalized) = process_timestamp_field(value, "Binance");
-    
+
     if !is_timestamp {
         // It's a sequence number - use current time instead
         let current = get_current_timestamp_ms();
-        debug!("Binance {}: Replacing sequence {} with current timestamp {}", 
+        debug!("Binance {}: Replacing sequence {} with current timestamp {}",
             symbol, value, current);
         current
     } else {
@@ -136,19 +140,19 @@ mod tests {
     fn test_valid_timestamps() {
         // Valid milliseconds (13 digits, recent)
         assert!(is_valid_timestamp(1757545057527, "Test"));
-        
-        // Valid seconds (10 digits, recent) 
+
+        // Valid seconds (10 digits, recent)
         assert!(is_valid_timestamp(1757545057, "Test"));
     }
-    
+
     #[test]
     fn test_binance_fix() {
         // Sequence number should be replaced with current time
         let fixed = fix_binance_timestamp(134456049, "TEST-USDT");
         assert!(fixed > 1_000_000_000_000); // Should be current time in ms
-        
+
         // Valid timestamp should be preserved
-        let valid = 1757545057527i64;
+        let valid = 1757545057527u64;
         let fixed = fix_binance_timestamp(valid, "TEST-USDT");
         assert_eq!(fixed, valid);
     }

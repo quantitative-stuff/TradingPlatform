@@ -183,14 +183,17 @@ impl TerminalMonitor {
         let recent_trades: Vec<_> = trades.iter().rev().take(5).collect();
         
         for trade in recent_trades {
-            let time = chrono::DateTime::<chrono::Utc>::from_timestamp_millis(trade.timestamp)
+            let time = chrono::DateTime::<chrono::Utc>::from_timestamp_millis(trade.timestamp as i64)
                 .map(|dt| dt.format("%H:%M:%S").to_string())
                 .unwrap_or_else(|| "N/A".to_string());
-            
-            let value = trade.price * trade.quantity;
-            
-            println!("{:<10} | {:<12} | {:>12.4} | {:>12.4} | {:>12.2} | {:<20}", 
-                     trade.exchange, trade.symbol, trade.price, trade.quantity, value, time);
+
+            // Convert scaled i64 to f64 for display
+            let price_f64 = trade.get_price_f64();
+            let quantity_f64 = trade.get_quantity_f64();
+            let value = price_f64 * quantity_f64;
+
+            println!("{:<10} | {:<12} | {:>12.4} | {:>12.4} | {:>12.2} | {:<20}",
+                     trade.exchange, trade.symbol, price_f64, quantity_f64, value, time);
         }
     }
 
@@ -210,18 +213,21 @@ impl TerminalMonitor {
         let recent_books: Vec<_> = orderbooks.iter().rev().take(5).collect();
         
         for ob in recent_books {
-            let best_bid = ob.bids.first().map(|b| b.0).unwrap_or(0.0);
-            let best_ask = ob.asks.first().map(|a| a.0).unwrap_or(0.0);
+            // Convert scaled i64 to f64 for display
+            let best_bid_i64 = ob.bids.first().map(|b| b.0).unwrap_or(0);
+            let best_ask_i64 = ob.asks.first().map(|a| a.0).unwrap_or(0);
+            let best_bid = ob.unscale_price(best_bid_i64);
+            let best_ask = ob.unscale_price(best_ask_i64);
             let bid_depth = ob.bids.len();
             let ask_depth = ob.asks.len();
-            
+
             let spread = if best_bid > 0.0 && best_ask > 0.0 {
                 ((best_ask - best_bid) / best_bid) * 10000.0
             } else {
                 0.0
             };
-            
-            println!("{:<10} | {:<12} | {:>12.4} | {:>12.4} | {:>10.1} | {:>8} | {:>8}", 
+
+            println!("{:<10} | {:<12} | {:>12.4} | {:>12.4} | {:>10.1} | {:>8} | {:>8}",
                      ob.exchange, ob.symbol, best_bid, best_ask, spread, bid_depth, ask_depth);
         }
     }

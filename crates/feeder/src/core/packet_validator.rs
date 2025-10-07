@@ -8,8 +8,8 @@ use once_cell::sync::OnceCell;
 pub struct ValidationMetrics {
     pub total_packets: u64,
     pub timestamp_inversions: u64,
-    pub max_inversion_ms: i64,
-    pub last_timestamp: i64,
+    pub max_inversion_ms: u64,
+    pub last_timestamp: u64,
     pub sequence_gaps: u64,
     pub last_sequence: u64,
     pub inversion_rate: f64,
@@ -46,7 +46,7 @@ impl PacketValidator {
     }
 
     /// Validate packet BEFORE sending to UDP
-    pub fn validate_pre_send(&self, exchange: &str, symbol: &str, timestamp: i64, sequence: Option<u64>) {
+    pub fn validate_pre_send(&self, exchange: &str, symbol: &str, timestamp: u64, sequence: Option<u64>) {
         let key = format!("{}:{}", exchange, symbol);
         let mut metrics = self.pre_send_metrics.lock().unwrap();
         let metric = metrics.entry(key.clone()).or_default();
@@ -89,7 +89,7 @@ impl PacketValidator {
     }
 
     /// Validate packet AFTER receiving from UDP (called by order_validator)
-    pub fn validate_post_receive(&self, exchange: &str, symbol: &str, timestamp: i64, sequence: Option<u64>) {
+    pub fn validate_post_receive(&self, exchange: &str, symbol: &str, timestamp: u64, sequence: Option<u64>) {
         let key = format!("{}:{}", exchange, symbol);
         let mut metrics = self.post_receive_metrics.lock().unwrap();
         let metric = metrics.entry(key).or_default();
@@ -206,14 +206,14 @@ pub fn get_packet_validator() -> Option<Arc<PacketValidator>> {
 }
 
 /// Convenience function for pre-send validation
-pub fn validate_before_send(exchange: &str, symbol: &str, timestamp: i64) {
+pub fn validate_before_send(exchange: &str, symbol: &str, timestamp: u64) {
     if let Some(validator) = get_packet_validator() {
         validator.validate_pre_send(exchange, symbol, timestamp, None);
     }
 }
 
 /// Convenience function for post-receive validation
-pub fn validate_after_receive(exchange: &str, symbol: &str, timestamp: i64) {
+pub fn validate_after_receive(exchange: &str, symbol: &str, timestamp: u64) {
     if let Some(validator) = get_packet_validator() {
         validator.validate_post_receive(exchange, symbol, timestamp, None);
     }

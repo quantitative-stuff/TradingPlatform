@@ -71,7 +71,8 @@ pub struct OptionsData {
     pub greeks: OptionsGreeks,
     pub open_interest: i64,
     pub volume: i64,
-    pub timestamp: i64,
+    pub timestamp: u64,
+    pub timestamp_unit: crate::load_config::TimestampUnit,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -100,7 +101,8 @@ pub struct FuturesData {
     pub volume: i64,
     pub basis: f64,
     pub settlement_price: f64,
-    pub timestamp: i64,
+    pub timestamp: u64,
+    pub timestamp_unit: crate::load_config::TimestampUnit,
 }
 
 // ETF Data with NAV
@@ -362,15 +364,21 @@ impl LSEnhancedExchange {
     async fn handle_stock_etf_price(&self, message: Value, asset_type: AssetType) -> Result<()> {
         if let Some(body) = message.get("body") {
             let symbol = body.get("shcode").and_then(|v| v.as_str()).unwrap_or("").to_string();
-            
-            let trade_data = TradeData {
-                exchange: "LS".to_string(),
-                symbol: symbol.clone(),
-                asset_type: asset_type.as_str().to_string(),
-                timestamp: chrono::Utc::now().timestamp_millis(),
-                price: body.get("price").and_then(|v| v.as_f64()).unwrap_or(0.0),
-                quantity: body.get("cvolume").and_then(|v| v.as_f64()).unwrap_or(0.0),
-            };
+
+            let price_f64 = body.get("price").and_then(|v| v.as_f64()).unwrap_or(0.0);
+            let quantity_f64 = body.get("cvolume").and_then(|v| v.as_f64()).unwrap_or(0.0);
+
+            let trade_data = TradeData::from_f64(
+                "LS".to_string(),
+                symbol.clone(),
+                asset_type.as_str().to_string(),
+                price_f64,
+                quantity_f64,
+                8,  // price_precision
+                8,  // quantity_precision
+                chrono::Utc::now().timestamp_millis() as u64,
+                crate::load_config::TimestampUnit::Milliseconds,
+            );
 
             if let Some(sender) = get_optimized_udp_sender() {
                 let _ = sender.send_trade_data(trade_data);
@@ -412,14 +420,17 @@ impl LSEnhancedExchange {
                 }
             }
             
-            let orderbook_data = OrderBookData {
-                exchange: "LS".to_string(),
+            let orderbook_data = OrderBookData::from_f64(
+                "LS".to_string(),
                 symbol,
-                asset_type: asset_type.as_str().to_string(),
+                asset_type.as_str().to_string(),
                 bids,
                 asks,
-                timestamp: chrono::Utc::now().timestamp_millis(),
-            };
+                8,  // price_precision
+                8,  // quantity_precision
+                chrono::Utc::now().timestamp_millis() as u64,
+                crate::load_config::TimestampUnit::Milliseconds,
+            );
 
             if let Some(sender) = get_optimized_udp_sender() {
                 let _ = sender.send_orderbook_data(orderbook_data);
@@ -441,18 +452,22 @@ impl LSEnhancedExchange {
                 volume: body.get("volume").and_then(|v| v.as_i64()).unwrap_or(0),
                 basis: body.get("basis").and_then(|v| v.as_f64()).unwrap_or(0.0),
                 settlement_price: body.get("settlement").and_then(|v| v.as_f64()).unwrap_or(0.0),
-                timestamp: chrono::Utc::now().timestamp_millis(),
+                timestamp: chrono::Utc::now().timestamp_millis() as u64,
+                timestamp_unit: crate::load_config::TimestampUnit::default(),
             };
 
             // Convert to TradeData for UDP sending
-            let trade_data = TradeData {
-                exchange: "LS".to_string(),
+            let trade_data = TradeData::from_f64(
+                "LS".to_string(),
                 symbol,
-                asset_type: "futures".to_string(),
-                timestamp: futures_data.timestamp,
-                price: futures_data.price,
-                quantity: futures_data.volume as f64,
-            };
+                "futures".to_string(),
+                futures_data.price,
+                futures_data.volume as f64,
+                8,  // price_precision
+                8,  // quantity_precision
+                futures_data.timestamp,
+                crate::load_config::TimestampUnit::Milliseconds,
+            );
 
             if let Some(sender) = get_optimized_udp_sender() {
                 let _ = sender.send_trade_data(trade_data);
@@ -501,18 +516,22 @@ impl LSEnhancedExchange {
                 },
                 open_interest: body.get("openinterest").and_then(|v| v.as_i64()).unwrap_or(0),
                 volume: body.get("volume").and_then(|v| v.as_i64()).unwrap_or(0),
-                timestamp: chrono::Utc::now().timestamp_millis(),
+                timestamp: chrono::Utc::now().timestamp_millis() as u64,
+                timestamp_unit: crate::load_config::TimestampUnit::default(),
             };
 
             // Convert to TradeData for UDP sending
-            let trade_data = TradeData {
-                exchange: "LS".to_string(),
+            let trade_data = TradeData::from_f64(
+                "LS".to_string(),
                 symbol,
-                asset_type: "options".to_string(),
-                timestamp: options_data.timestamp,
-                price: options_data.price,
-                quantity: options_data.volume as f64,
-            };
+                "options".to_string(),
+                options_data.price,
+                options_data.volume as f64,
+                8,  // price_precision
+                8,  // quantity_precision
+                options_data.timestamp,
+                crate::load_config::TimestampUnit::Milliseconds,
+            );
 
             if let Some(sender) = get_optimized_udp_sender() {
                 let _ = sender.send_trade_data(trade_data);
@@ -540,14 +559,17 @@ impl LSEnhancedExchange {
         if let Some(body) = message.get("body") {
             let symbol = body.get("symbol").and_then(|v| v.as_str()).unwrap_or("").to_string();
             
-            let trade_data = TradeData {
-                exchange: "LS".to_string(),
-                symbol: symbol.clone(),
-                asset_type: "overseas_futures".to_string(),
-                timestamp: chrono::Utc::now().timestamp_millis(),
-                price: body.get("price").and_then(|v| v.as_f64()).unwrap_or(0.0),
-                quantity: body.get("volume").and_then(|v| v.as_f64()).unwrap_or(0.0),
-            };
+            let trade_data = TradeData::from_f64(
+                "LS".to_string(),
+                symbol.clone(),
+                "overseas_futures".to_string(),
+                body.get("price").and_then(|v| v.as_f64()).unwrap_or(0.0),
+                body.get("volume").and_then(|v| v.as_f64()).unwrap_or(0.0),
+                8,  // price_precision
+                8,  // quantity_precision
+                chrono::Utc::now().timestamp_millis() as u64,
+                crate::load_config::TimestampUnit::Milliseconds,
+            );
 
             if let Some(sender) = get_optimized_udp_sender() {
                 let _ = sender.send_trade_data(trade_data);

@@ -370,6 +370,7 @@ fn process_deribit_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_t
                                 bids: Vec::new(),
                                 asks: Vec::new(),
                                 timestamp: 0,
+                timestamp_unit: crate::load_config::TimestampUnit::default(),
                             });
 
                             orderbook.timestamp = timestamp;

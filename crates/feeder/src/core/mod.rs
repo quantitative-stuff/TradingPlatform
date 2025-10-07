@@ -72,16 +72,21 @@ pub use order_traits::{
 
 // Import from types module if needed
 pub use types::{
-    MarketData, 
+    MarketData,
     MarketDataType,
-    OrderBookData, 
-    TradeData, 
+    OrderBookData,
+    TradeData,
     SymbolMapper,
-    TRADES, 
-    ORDERBOOKS, 
+    TRADES,
+    ORDERBOOKS,
     COMPARE_NOTIFY,
     get_shutdown_receiver,
-    trigger_shutdown
+    trigger_shutdown,
+    // HFT: String → scaled i64 parsing (NO f64!)
+    parse_to_scaled,
+    parse_to_scaled_or_default,
+    PRICE_SCALE,
+    QTY_SCALE,
 };
 
 

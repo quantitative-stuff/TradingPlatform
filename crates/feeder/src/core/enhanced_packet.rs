@@ -7,10 +7,10 @@ pub struct EnhancedTradePacket {
     // Header
     pub exchange: String,
     pub symbol: String,
-    pub timestamp: i64,
+    pub timestamp: u64,
     pub price_scale: u8,      // Number of decimals (scale factor = 10^price_scale)
     pub quantity_scale: u8,   // Number of decimals for quantity
-    
+
     // Scaled data
     pub price_scaled: i64,    // Actual price * 10^price_scale
     pub quantity_scaled: i64, // Actual quantity * 10^quantity_scale
@@ -23,10 +23,10 @@ pub struct EnhancedOrderBookPacket {
     // Header
     pub exchange: String,
     pub symbol: String,
-    pub timestamp: i64,
+    pub timestamp: u64,
     pub price_scale: u8,      // Number of decimals
     pub quantity_scale: u8,   // Number of decimals for quantity
-    
+
     // Scaled data
     pub bids: Vec<(i64, i64)>, // [(scaled_price, scaled_quantity)]
     pub asks: Vec<(i64, i64)>, // [(scaled_price, scaled_quantity)]
@@ -36,18 +36,32 @@ impl EnhancedTradePacket {
     pub fn from_trade_data(trade: &TradeData) -> Self {
         let price_scale = get_price_decimals(&trade.symbol, Some(&trade.exchange));
         let quantity_scale = 8; // Default, should come from precision manager
-        
-        let price_scale_factor = 10_i64.pow(price_scale as u32);
-        let quantity_scale_factor = 10_i64.pow(quantity_scale as u32);
-        
+
+        // Convert from trade's precision to target precision
+        let price_scaled = if trade.price_precision < price_scale {
+            trade.price * 10_i64.pow((price_scale - trade.price_precision) as u32)
+        } else if trade.price_precision > price_scale {
+            trade.price / 10_i64.pow((trade.price_precision - price_scale) as u32)
+        } else {
+            trade.price
+        };
+
+        let quantity_scaled = if trade.quantity_precision < quantity_scale {
+            trade.quantity * 10_i64.pow((quantity_scale - trade.quantity_precision) as u32)
+        } else if trade.quantity_precision > quantity_scale {
+            trade.quantity / 10_i64.pow((trade.quantity_precision - quantity_scale) as u32)
+        } else {
+            trade.quantity
+        };
+
         Self {
             exchange: trade.exchange.clone(),
             symbol: trade.symbol.clone(),
             timestamp: trade.timestamp,
             price_scale,
             quantity_scale,
-            price_scaled: (trade.price * price_scale_factor as f64).round() as i64,
-            quantity_scaled: (trade.quantity * quantity_scale_factor as f64).round() as i64,
+            price_scaled,
+            quantity_scaled,
             side: "unknown".to_string(), // TradeData doesn't have side field
             trade_id: None, // TradeData doesn't have trade_id field
         }
@@ -118,7 +132,7 @@ impl EnhancedTradePacket {
             .trim_end_matches('\0')
             .to_string();
         
-        let timestamp = i64::from_be_bytes([
+        let timestamp = u64::from_be_bytes([
             data[43], data[44], data[45], data[46],
             data[47], data[48], data[49], data[50],
         ]);
@@ -153,17 +167,31 @@ impl EnhancedOrderBookPacket {
     pub fn from_orderbook_data(orderbook: &OrderBookData) -> Self {
         let price_scale = get_price_decimals(&orderbook.symbol, Some(&orderbook.exchange));
         let quantity_scale = 8; // Default
-        
-        let price_scale_factor = 10_i64.pow(price_scale as u32);
-        let quantity_scale_factor = 10_i64.pow(quantity_scale as u32);
-        
-        let scale_level = |(price, qty): &(f64, f64)| -> (i64, i64) {
-            (
-                (price * price_scale_factor as f64).round() as i64,
-                (qty * quantity_scale_factor as f64).round() as i64,
-            )
+
+        let price_precision = orderbook.price_precision;
+        let qty_precision = orderbook.quantity_precision;
+
+        // Convert from orderbook's precision to target precision
+        let scale_level = |(price, qty): &(i64, i64)| -> (i64, i64) {
+            let price_scaled = if price_precision < price_scale {
+                price * 10_i64.pow((price_scale - price_precision) as u32)
+            } else if price_precision > price_scale {
+                price / 10_i64.pow((price_precision - price_scale) as u32)
+            } else {
+                *price
+            };
+
+            let qty_scaled = if qty_precision < quantity_scale {
+                qty * 10_i64.pow((quantity_scale - qty_precision) as u32)
+            } else if qty_precision > quantity_scale {
+                qty / 10_i64.pow((qty_precision - quantity_scale) as u32)
+            } else {
+                *qty
+            };
+
+            (price_scaled, qty_scaled)
         };
-        
+
         Self {
             exchange: orderbook.exchange.clone(),
             symbol: orderbook.symbol.clone(),

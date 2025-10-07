@@ -11,7 +11,7 @@ use tracing::{debug, info, warn, error};
 use futures_util::future::FutureExt;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use crate::core::{OrderBookData, Feeder, SymbolMapper, CONNECTION_STATS, get_shutdown_receiver};
+use crate::core::{OrderBookData, Feeder, SymbolMapper, CONNECTION_STATS, get_shutdown_receiver, parse_to_scaled_or_default};
 use crate::error::Result;
 use crate::load_config::ExchangeConfig;
 
@@ -166,7 +166,7 @@ impl Feeder for BithumbExchange {
 
         async fn start(&mut self) -> Result<()> {
         self.active_connections.store(0, Ordering::SeqCst);
-        
+
         for ((asset_type, chunk_idx), ws_stream_opt) in self.ws_streams.iter_mut() {
             if let Some(mut ws_stream) = ws_stream_opt.take() {
                 let asset_type = asset_type.clone();
@@ -174,7 +174,8 @@ impl Feeder for BithumbExchange {
                 let symbol_mapper = self.symbol_mapper.clone();
                 let active_connections = self.active_connections.clone();
                 let orderbooks = self.orderbooks.clone();
-                
+                let config = self.config.clone();
+
                 active_connections.fetch_add(1, Ordering::SeqCst);
 
                 tokio::spawn(async move {
@@ -224,7 +225,7 @@ impl Feeder for BithumbExchange {
                                     Some(Ok(Message::Text(text))) => {
                                         debug!("Bithumb {} chunk {} received text message", asset_type, chunk_idx);
                                         last_message_time = std::time::Instant::now();
-                                        process_bithumb_message(&text, symbol_mapper.clone(), &asset_type, orderbooks.clone());
+                                        process_bithumb_message(&text, symbol_mapper.clone(), &asset_type, orderbooks.clone(), &config);
                                     },
                                     Some(Ok(Message::Binary(data))) => {
                                         // Bithumb sends binary data, decode it as UTF-8
@@ -235,7 +236,7 @@ impl Feeder for BithumbExchange {
                                                     asset_type, chunk_idx, text);
                                             }
                                             last_message_time = std::time::Instant::now();
-                                            process_bithumb_message(&text, symbol_mapper.clone(), &asset_type, orderbooks.clone());
+                                            process_bithumb_message(&text, symbol_mapper.clone(), &asset_type, orderbooks.clone(), &config);
                                         } else {
                                             debug!("Bithumb {} chunk {} received binary message ({} bytes) - failed to decode as UTF-8",
                                                 asset_type, chunk_idx, data.len());
@@ -328,7 +329,7 @@ impl Feeder for BithumbExchange {
     }
 }
 
-fn process_bithumb_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_type: &str, orderbooks: Arc<parking_lot::RwLock<HashMap<String, OrderBookData>>>) {
+fn process_bithumb_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_type: &str, orderbooks: Arc<parking_lot::RwLock<HashMap<String, OrderBookData>>>, config: &ExchangeConfig) {
     use std::sync::atomic::{AtomicU64, Ordering};
     static MESSAGE_COUNT: AtomicU64 = AtomicU64::new(0);
 
@@ -394,20 +395,28 @@ fn process_bithumb_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_t
                     }
                 };
 
-                // Try different field names for price, quantity, timestamp
+                // HFT: Get precision from config
+                let price_precision = config.feed_config.get_price_precision(&common_symbol);
+                let qty_precision = config.feed_config.get_quantity_precision(&common_symbol);
+
+                // HFT: Parse directly to scaled i64 (NO f64!)
+                // Bithumb sends as JSON number (f64), so convert: (value * 10^precision) as i64
                 let price = value.get("trade_price")
                     .or_else(|| value.get("tp"))
                     .and_then(Value::as_f64)
-                    .unwrap_or_default();
+                    .map(|v| (v * 10_f64.powi(price_precision as i32)) as i64)
+                    .unwrap_or(0);
                 let quantity = value.get("trade_volume")
                     .or_else(|| value.get("tv"))
                     .and_then(Value::as_f64)
-                    .unwrap_or(1.0); // Default to 1.0 if no volume
+                    .map(|v| (v * 10_f64.powi(qty_precision as i32)) as i64)
+                    .unwrap_or(10_i64.pow(qty_precision as u32)); // Default to 1.0 scaled
                 let timestamp = value.get("trade_timestamp")
                     .or_else(|| value.get("ttms"))
                     .or_else(|| value.get("timestamp"))
                     .and_then(Value::as_i64)
-                    .unwrap_or_else(|| chrono::Utc::now().timestamp_millis());
+                    .map(|t| t.max(0) as u64)
+                    .unwrap_or_else(|| chrono::Utc::now().timestamp_millis() as u64);
 
                 if count % 50 == 0 {
                     debug!("Bithumb TRADE {} @ {} x {}", common_symbol, price, quantity);
@@ -419,7 +428,10 @@ fn process_bithumb_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_t
                     asset_type: asset_type.to_string(),
                     price,
                     quantity,
+                    price_precision,
+                    quantity_precision: qty_precision,
                     timestamp,
+                    timestamp_unit: crate::load_config::TimestampUnit::Milliseconds,
                 };
 
                 {
@@ -454,6 +466,10 @@ fn process_bithumb_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_t
                     }
                 };
 
+                // HFT: Get precision BEFORE parsing orderbook
+                let price_precision = config.feed_config.get_price_precision(&common_symbol);
+                let qty_precision = config.feed_config.get_quantity_precision(&common_symbol);
+
                 // Parse orderbook data
                 let orderbook_units = value.get("orderbook_units")
                     .and_then(Value::as_array);
@@ -465,19 +481,24 @@ fn process_bithumb_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_t
                     for unit in units.iter().take(20) {
                         if let Some(ask_price) = unit.get("ask_price").and_then(Value::as_f64) {
                             if let Some(ask_size) = unit.get("ask_size").and_then(Value::as_f64) {
-                                asks.push((ask_price, ask_size));
+                                let price = (ask_price * 10_f64.powi(price_precision as i32)) as i64;
+                                let size = (ask_size * 10_f64.powi(qty_precision as i32)) as i64;
+                                asks.push((price, size));
                             }
                         }
                         if let Some(bid_price) = unit.get("bid_price").and_then(Value::as_f64) {
                             if let Some(bid_size) = unit.get("bid_size").and_then(Value::as_f64) {
-                                bids.push((bid_price, bid_size));
+                                let price = (bid_price * 10_f64.powi(price_precision as i32)) as i64;
+                                let size = (bid_size * 10_f64.powi(qty_precision as i32)) as i64;
+                                bids.push((price, size));
                             }
                         }
                     }
 
                     let timestamp = value.get("timestamp")
                         .and_then(Value::as_i64)
-                        .unwrap_or_else(|| chrono::Utc::now().timestamp_millis());
+                        .map(|t| t.max(0) as u64)
+                        .unwrap_or_else(|| chrono::Utc::now().timestamp_millis() as u64);
 
                     if count % 50 == 0 {
                         debug!("Bithumb ORDERBOOK {} - {} bids, {} asks", common_symbol, bids.len(), asks.len());
@@ -489,7 +510,10 @@ fn process_bithumb_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_t
                         asset_type: asset_type.to_string(),
                         bids,
                         asks,
+                        price_precision,
+                        quantity_precision: qty_precision,
                         timestamp,
+                        timestamp_unit: crate::load_config::TimestampUnit::Milliseconds,
                     };
 
                     {

@@ -10,7 +10,7 @@ use tracing::{debug, info, warn, error};
 use futures_util::future::FutureExt;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use crate::core::{Feeder, SymbolMapper, CONNECTION_STATS, get_shutdown_receiver, get_multi_port_sender};
+use crate::core::{Feeder, SymbolMapper, CONNECTION_STATS, get_shutdown_receiver, get_multi_port_sender, parse_to_scaled_or_default};
 use crate::error::{Result, Error};
 use crate::load_config::ExchangeConfig;
 use crate::connect_to_databse::ConnectionEvent;
@@ -225,13 +225,14 @@ impl Feeder for BybitExchange {
     async fn start(&mut self) -> Result<()> {
         // Reset connection counter
         self.active_connections.store(0, Ordering::SeqCst);
-        
+
         for ((asset_type, chunk_idx), ws_stream_opt) in self.ws_streams.iter_mut() {
             if let Some(mut ws_stream) = ws_stream_opt.take() {
                 let asset_type = asset_type.clone();
                 let chunk_idx = *chunk_idx;
                 let symbol_mapper = self.symbol_mapper.clone();
                 let active_connections = self.active_connections.clone();
+                let config = self.config.clone();
                 
                 // Increment active connection count
                 active_connections.fetch_add(1, Ordering::SeqCst);
@@ -292,7 +293,7 @@ impl Feeder for BybitExchange {
                                 match msg {
                                     Some(Ok(Message::Text(text))) => {
                                         last_message_time = std::time::Instant::now(); // Update last message time
-                                        process_bybit_message(&text, symbol_mapper.clone(), &asset_type);
+                                        process_bybit_message(&text, symbol_mapper.clone(), &asset_type, &config);
                                     },
                                     Some(Ok(Message::Pong(_))) => {
                                         last_message_time = std::time::Instant::now(); // Update last message time
@@ -393,7 +394,7 @@ impl Feeder for BybitExchange {
 
 
 
-fn process_bybit_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_type: &str) {
+fn process_bybit_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_type: &str, config: &ExchangeConfig) {
     // Add debug to see all messages
     if !text.contains("pong") && !text.contains("ping") {
         debug!("{}", crate::core::safe_websocket_message_log("Bybit", text));
@@ -436,11 +437,11 @@ fn process_bybit_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_typ
             if data.is_array() {
                 // Snapshot: data is an array of trade objects.
                 for trade in data.as_array().unwrap() {
-                    process_bybit_trade(trade, &symbol_mapper, asset_type);
+                    process_bybit_trade(trade, &symbol_mapper, asset_type, config);
                 }
             } else if data.is_object() {
                 // Delta: data is a single trade object.
-                process_bybit_trade(data, &symbol_mapper, asset_type);
+                process_bybit_trade(data, &symbol_mapper, asset_type, config);
             } else {
                 debug!("[Bybit] Unexpected data format in trade message.");
             }
@@ -456,41 +457,11 @@ fn process_bybit_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_typ
                 .and_then(Value::as_i64)
                 .or_else(|| value.get("ts").and_then(Value::as_i64))
                 .or_else(|| value.get("cts").and_then(Value::as_i64))
-                .unwrap_or_default();
+                .unwrap_or_default()
+                .max(0) as u64;
 
             // Log message type for debugging
             debug!("[Bybit] Orderbook message type: {}", message_type);
-
-            // Process bid and ask arrays.
-            // For delta messages: quantity=0 means delete the price level, otherwise update/add
-            let bids: Vec<(f64, f64)> = data.get("b")
-                .and_then(Value::as_array)
-                .map(|arr| {
-                    arr.iter().filter_map(|level| {
-                        let price = level.get(0)?.as_str()?.parse::<f64>().ok()?;
-                        let quantity = level.get(1)?.as_str()?.parse::<f64>().ok()?;
-
-                        // For delta messages, quantity=0 means delete this price level
-                        // We still include it in the data structure for downstream processing
-                        // The consumer should handle quantity=0 as deletion
-                        Some((price, quantity))
-                    }).collect()
-                })
-                .unwrap_or_default();
-
-            let asks: Vec<(f64, f64)> = data.get("a")
-                .and_then(Value::as_array)
-                .map(|arr| {
-                    arr.iter().filter_map(|level| {
-                        let price = level.get(0)?.as_str()?.parse::<f64>().ok()?;
-                        let quantity = level.get(1)?.as_str()?.parse::<f64>().ok()?;
-
-                        // For delta messages, quantity=0 means delete this price level
-                        // We still include it in the data structure for downstream processing
-                        Some((price, quantity))
-                    }).collect()
-                })
-                .unwrap_or_default();
 
             // Use the symbol from the orderbook data.
             let original_symbol = data.get("s").and_then(Value::as_str).unwrap_or_default();
@@ -501,6 +472,46 @@ fn process_bybit_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_typ
                     original_symbol.to_string()
                 }
             };
+
+            // Get precision from config
+            let price_precision = config.feed_config.get_price_precision(&common_symbol);
+            let quantity_precision = config.feed_config.get_quantity_precision(&common_symbol);
+
+            // Process bid and ask arrays.
+            // For delta messages: quantity=0 means delete the price level, otherwise update/add
+            // HFT: Parse directly to scaled i64 (NO f64!)
+            let bids: Vec<(i64, i64)> = data.get("b")
+                .and_then(Value::as_array)
+                .map(|arr| {
+                    arr.iter().filter_map(|level| {
+                        let price_str = level.get(0)?.as_str()?;
+                        let qty_str = level.get(1)?.as_str()?;
+                        let price = parse_to_scaled_or_default(price_str, price_precision);
+                        let quantity = parse_to_scaled_or_default(qty_str, quantity_precision);
+
+                        // For delta messages, quantity=0 means delete this price level
+                        // We still include it in the data structure for downstream processing
+                        // The consumer should handle quantity=0 as deletion
+                        Some((price, quantity))
+                    }).collect()
+                })
+                .unwrap_or_default();
+
+            let asks: Vec<(i64, i64)> = data.get("a")
+                .and_then(Value::as_array)
+                .map(|arr| {
+                    arr.iter().filter_map(|level| {
+                        let price_str = level.get(0)?.as_str()?;
+                        let qty_str = level.get(1)?.as_str()?;
+                        let price = parse_to_scaled_or_default(price_str, price_precision);
+                        let quantity = parse_to_scaled_or_default(qty_str, quantity_precision);
+
+                        // For delta messages, quantity=0 means delete this price level
+                        // We still include it in the data structure for downstream processing
+                        Some((price, quantity))
+                    }).collect()
+                })
+                .unwrap_or_default();
 
             // Handle snapshot vs delta internally for Bybit
             // For snapshot: full orderbook replacement
@@ -521,14 +532,17 @@ fn process_bybit_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_typ
                 }
             }
 
-            let orderbook = crate::core::OrderBookData::new(
-                "Bybit".to_string(),
-                common_symbol,
-                asset_type.to_string(),
+            let orderbook = crate::core::OrderBookData {
+                exchange: "Bybit".to_string(),
+                symbol: common_symbol,
+                asset_type: asset_type.to_string(),
                 bids,
                 asks,
+                price_precision,
+                quantity_precision,
                 timestamp,
-            );
+                timestamp_unit: crate::load_config::TimestampUnit::Milliseconds,
+            };
 
             {
                 let mut orderbooks = crate::core::ORDERBOOKS.write();
@@ -566,7 +580,7 @@ fn process_bybit_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_typ
 }
 
 
-fn process_bybit_trade(trade_data: &Value, symbol_mapper: &Arc<SymbolMapper>, asset_type: &str) {
+fn process_bybit_trade(trade_data: &Value, symbol_mapper: &Arc<SymbolMapper>, asset_type: &str, config: &ExchangeConfig) {
     let original_symbol = trade_data.get("s").and_then(Value::as_str).unwrap_or_default();
                 let common_symbol = match symbol_mapper.map("Bybit", original_symbol) {
                 Some(symbol) => symbol,
@@ -576,27 +590,33 @@ fn process_bybit_trade(trade_data: &Value, symbol_mapper: &Arc<SymbolMapper>, as
                 }
             };
 
+    // Get precision from config
+    let price_precision = config.feed_config.get_price_precision(&common_symbol);
+    let quantity_precision = config.feed_config.get_quantity_precision(&common_symbol);
+
+    // HFT: Parse directly to scaled i64 (NO f64!)
     let price = trade_data.get("p")
         .and_then(Value::as_str)
-        .and_then(|s| s.parse::<f64>().ok())
-        .unwrap_or_default();
+        .map(|s| parse_to_scaled_or_default(s, price_precision))
+        .unwrap_or(0);
     let quantity = trade_data.get("v")
         .and_then(Value::as_str)
-        .and_then(|s| s.parse::<f64>().ok())
-        .unwrap_or_default();
+        .map(|s| parse_to_scaled_or_default(s, quantity_precision))
+        .unwrap_or(0);
     let timestamp = trade_data.get("T")
         .and_then(Value::as_i64)
         .map(|t| {
             // Validate and normalize timestamp
-            let (is_valid, normalized) = crate::core::process_timestamp_field(t, "Bybit");
+            let t_u64 = t.max(0) as u64;
+            let (is_valid, normalized) = crate::core::process_timestamp_field(t_u64, "Bybit");
             if !is_valid {
                 // Invalid timestamp, use current time
-                chrono::Utc::now().timestamp_millis()
+                chrono::Utc::now().timestamp_millis() as u64
             } else {
                 normalized
             }
         })
-        .unwrap_or_else(|| chrono::Utc::now().timestamp_millis());
+        .unwrap_or_else(|| chrono::Utc::now().timestamp_millis() as u64);
 
     let trade = crate::core::TradeData {
         exchange: "Bybit".to_string(),
@@ -604,7 +624,10 @@ fn process_bybit_trade(trade_data: &Value, symbol_mapper: &Arc<SymbolMapper>, as
         asset_type: asset_type.to_string(),
         price,
         quantity,
+        price_precision,
+        quantity_precision,
         timestamp,
+        timestamp_unit: crate::load_config::TimestampUnit::Milliseconds,
     };
 
     {

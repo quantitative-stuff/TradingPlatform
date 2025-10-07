@@ -55,17 +55,21 @@ impl MarketDataComparator {
                 for j in i+1..trades_vec.len() {
                     let (exchange1, trade1) = trades_vec[i];
                     let (exchange2, trade2) = trades_vec[j];
-                    
-                    let spread = (trade1.price - trade2.price).abs();
-                    let spread_percent = (spread / trade1.price) * 100.0;
-                    
+
+                    // Convert scaled i64 to f64 for comparison
+                    let price1_f64 = trade1.get_price_f64();
+                    let price2_f64 = trade2.get_price_f64();
+
+                    let spread = (price1_f64 - price2_f64).abs();
+                    let spread_percent = (spread / price1_f64) * 100.0;
+
                     let spread_data = SpreadData {
                         timestamp: Utc::now().timestamp(),
                         symbol: symbol.to_string(),
                         exchange1: exchange1.clone(),
                         exchange2: exchange2.clone(),
-                        price1: trade1.price,
-                        price2: trade2.price,
+                        price1: price1_f64,
+                        price2: price2_f64,
                         spread,
                         spread_percent,
                     };
@@ -103,10 +107,12 @@ impl MarketDataComparator {
         if latest_orderbooks.len() >= 2 {
             println!("Latest orderbook data for {} at {}", symbol, Utc::now());
             for (exchange, ob) in &latest_orderbooks {
-                let best_bid = ob.bids.first().map_or(0.0, |&(price, _)| price);
-                let best_ask = ob.asks.first().map_or(0.0, |&(price, _)| price);
-                println!("  {}: Bid {} / Ask {} (timestamp: {})", 
-                    exchange, 
+                let best_bid_i64 = ob.bids.first().map_or(0, |&(price, _)| price);
+                let best_ask_i64 = ob.asks.first().map_or(0, |&(price, _)| price);
+                let best_bid = ob.unscale_price(best_bid_i64);
+                let best_ask = ob.unscale_price(best_ask_i64);
+                println!("  {}: Bid {} / Ask {} (timestamp: {})",
+                    exchange,
                     best_bid,
                     best_ask,
                     ob.timestamp

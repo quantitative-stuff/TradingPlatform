@@ -18,7 +18,7 @@ const DEFAULT_FLUSH_INTERVAL_MS: u64 = 50; // Check buffer every 50ms
 // Wrapper for packets with timestamp for ordering
 #[derive(Clone, Debug)]
 struct TimestampedPacket {
-    timestamp: i64, // Exchange timestamp for ordering
+    timestamp: u64, // Exchange timestamp for ordering
     packet_type: String,
     data: Vec<u8>,
     created_at: Instant, // When packet was created (for timeout)
@@ -98,7 +98,7 @@ impl OrderedUdpSender {
             
             let mut stats_packets_reordered = 0u64;
             let mut stats_last_log = Instant::now();
-            let mut last_sent_timestamp = 0i64;
+            let mut last_sent_timestamp = 0u64;
             
             loop {
                 tokio::select! {
@@ -250,11 +250,11 @@ impl OrderedUdpSender {
     }
     
     pub async fn send_stats(&self, exchange: &str, trades: usize, orderbooks: usize) -> Result<()> {
-        let timestamp = chrono::Local::now().timestamp();
-        let packet_data = format!("STATS|{}|{}|{}|{}", 
+        let timestamp = chrono::Local::now().timestamp() as u64;
+        let packet_data = format!("STATS|{}|{}|{}|{}",
             exchange, trades, orderbooks, timestamp
         );
-        
+
         let packet = TimestampedPacket {
             timestamp,
             packet_type: "STATS".to_string(),
@@ -268,11 +268,11 @@ impl OrderedUdpSender {
     }
     
     pub async fn send_exchange_data(&self, exchange: &str, asset_type: &str, trades: usize, orderbooks: usize) -> Result<()> {
-        let timestamp = chrono::Local::now().timestamp();
-        let packet_data = format!("EXCHANGE|{}|{}|{}|{}|{}", 
+        let timestamp = chrono::Local::now().timestamp() as u64;
+        let packet_data = format!("EXCHANGE|{}|{}|{}|{}|{}",
             exchange, asset_type, trades, orderbooks, timestamp
         );
-        
+
         let packet = TimestampedPacket {
             timestamp,
             packet_type: "EXCHANGE".to_string(),
@@ -288,11 +288,11 @@ impl OrderedUdpSender {
     pub async fn send_connection_status(&self, exchange: &str, connected: usize, disconnected: usize, reconnect_count: usize, total: usize) -> Result<()> {
         // Connection status packets should be sent immediately (no ordering needed)
         // but we'll use current timestamp for consistency
-        let timestamp = chrono::Local::now().timestamp();
-        let packet_data = format!("CONN|{}|{}|{}|{}|{}", 
+        let timestamp = chrono::Local::now().timestamp() as u64;
+        let packet_data = format!("CONN|{}|{}|{}|{}|{}",
             exchange, connected, disconnected, reconnect_count, total
         );
-        
+
         let packet = TimestampedPacket {
             timestamp,
             packet_type: "CONN".to_string(),
@@ -314,12 +314,12 @@ impl OrderedUdpSender {
         disconnected: usize,
         reconnect_count: usize
     ) -> Result<()> {
-        let timestamp = chrono::Local::now().timestamp();
-        let packet_data = format!("EXCHANGE|{}|{}|{}|{}|{}|{}|{}|{}", 
-            exchange, asset_type, trades, orderbooks, 
+        let timestamp = chrono::Local::now().timestamp() as u64;
+        let packet_data = format!("EXCHANGE|{}|{}|{}|{}|{}|{}|{}|{}",
+            exchange, asset_type, trades, orderbooks,
             connected, disconnected, reconnect_count, timestamp
         );
-        
+
         let packet = TimestampedPacket {
             timestamp,
             packet_type: "EXCHANGE".to_string(),

@@ -11,7 +11,7 @@ use tracing::{debug, info, warn, error};
 use futures_util::future::FutureExt;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use crate::core::{OrderBookData, Feeder, SymbolMapper, CONNECTION_STATS, get_shutdown_receiver};
+use crate::core::{OrderBookData, Feeder, SymbolMapper, CONNECTION_STATS, get_shutdown_receiver, parse_to_scaled_or_default};
 use crate::error::Result;
 use crate::load_config::ExchangeConfig;
 
@@ -155,7 +155,7 @@ impl Feeder for CoinbaseExchange {
 
     async fn start(&mut self) -> Result<()> {
         self.active_connections.store(0, Ordering::SeqCst);
-        
+
         for ((asset_type, chunk_idx), ws_stream_opt) in self.ws_streams.iter_mut() {
             if let Some(mut ws_stream) = ws_stream_opt.take() {
                 let asset_type = asset_type.clone();
@@ -163,7 +163,8 @@ impl Feeder for CoinbaseExchange {
                 let symbol_mapper = self.symbol_mapper.clone();
                 let active_connections = self.active_connections.clone();
                 let orderbooks = self.orderbooks.clone();
-                
+                let config = self.config.clone();
+
                 active_connections.fetch_add(1, Ordering::SeqCst);
 
                 tokio::spawn(async move {
@@ -211,7 +212,7 @@ impl Feeder for CoinbaseExchange {
                                 match msg {
                                     Some(Ok(Message::Text(text))) => {
                                         last_message_time = std::time::Instant::now();
-                                        process_coinbase_message(&text, symbol_mapper.clone(), &asset_type, orderbooks.clone());
+                                        process_coinbase_message(&text, symbol_mapper.clone(), &asset_type, orderbooks.clone(), &config);
                                     },
                                     Some(Ok(Message::Pong(_))) => {
                                         last_message_time = std::time::Instant::now();
@@ -297,7 +298,7 @@ impl Feeder for CoinbaseExchange {
     }
 }
 
-fn process_coinbase_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_type: &str, orderbooks: Arc<parking_lot::RwLock<HashMap<String, OrderBookData>>>) {
+fn process_coinbase_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_type: &str, orderbooks: Arc<parking_lot::RwLock<HashMap<String, OrderBookData>>>, config: &ExchangeConfig) {
     use std::sync::atomic::{AtomicU64, Ordering};
     static MESSAGE_COUNT: AtomicU64 = AtomicU64::new(0);
 
@@ -329,18 +330,23 @@ fn process_coinbase_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_
                     None => original_symbol.to_string()
                 };
 
+                // HFT: Get precision from config
+                let price_precision = config.feed_config.get_price_precision(&common_symbol);
+                let qty_precision = config.feed_config.get_quantity_precision(&common_symbol);
+
+                // HFT: Parse directly to scaled i64 (NO f64!)
                 let price = value.get("price")
                     .and_then(Value::as_str)
-                    .and_then(|s| s.parse::<f64>().ok())
-                    .unwrap_or_default();
+                    .map(|s| parse_to_scaled_or_default(s, price_precision))
+                    .unwrap_or(0);
                 let quantity = value.get("last_size")
                     .and_then(Value::as_str)
-                    .and_then(|s| s.parse::<f64>().ok())
-                    .unwrap_or_default();
+                    .map(|s| parse_to_scaled_or_default(s, qty_precision))
+                    .unwrap_or(0);
                 let timestamp = value.get("time")
                     .and_then(Value::as_str)
                     .and_then(|s| s.parse::<chrono::DateTime<chrono::Utc>>().ok())
-                    .map(|dt| dt.timestamp_millis())
+                    .map(|dt| dt.timestamp_millis().max(0) as u64)
                     .unwrap_or_default();
 
                 // println!("TRADE {} @ {} x {}", common_symbol, price, quantity);
@@ -351,7 +357,10 @@ fn process_coinbase_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_
                     asset_type: asset_type.to_string(),
                     price,
                     quantity,
+                    price_precision,
+                    quantity_precision: qty_precision,
                     timestamp,
+                    timestamp_unit: crate::load_config::TimestampUnit::Milliseconds,
                 };
 
                 {
@@ -378,24 +387,33 @@ fn process_coinbase_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_
                     }
                 };
 
-                let bids: Vec<(f64, f64)> = value.get("bids")
+                // HFT: Get precision BEFORE parsing orderbook
+                let price_precision = config.feed_config.get_price_precision(&common_symbol);
+                let qty_precision = config.feed_config.get_quantity_precision(&common_symbol);
+
+                // HFT: Parse directly to scaled i64 (NO f64!)
+                let bids: Vec<(i64, i64)> = value.get("bids")
                     .and_then(Value::as_array)
                     .map(|arr| {
                         arr.iter().filter_map(|level| {
-                            let price = level.get(0)?.as_str()?.parse::<f64>().ok()?;
-                            let quantity = level.get(1)?.as_str()?.parse::<f64>().ok()?;
-                            Some((price, quantity))
+                            let price_str = level.get(0)?.as_str()?;
+                            let qty_str = level.get(1)?.as_str()?;
+                            let price = parse_to_scaled_or_default(price_str, price_precision);
+                            let qty = parse_to_scaled_or_default(qty_str, qty_precision);
+                            Some((price, qty))
                         }).collect()
                     })
                     .unwrap_or_default();
 
-                let asks: Vec<(f64, f64)> = value.get("asks")
+                let asks: Vec<(i64, i64)> = value.get("asks")
                     .and_then(Value::as_array)
                     .map(|arr| {
                         arr.iter().filter_map(|level| {
-                            let price = level.get(0)?.as_str()?.parse::<f64>().ok()?;
-                            let quantity = level.get(1)?.as_str()?.parse::<f64>().ok()?;
-                            Some((price, quantity))
+                            let price_str = level.get(0)?.as_str()?;
+                            let qty_str = level.get(1)?.as_str()?;
+                            let price = parse_to_scaled_or_default(price_str, price_precision);
+                            let qty = parse_to_scaled_or_default(qty_str, qty_precision);
+                            Some((price, qty))
                         }).collect()
                     })
                     .unwrap_or_default();
@@ -406,7 +424,10 @@ fn process_coinbase_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_
                     asset_type: asset_type.to_string(),
                     bids: bids.clone(),
                     asks: asks.clone(),
+                    price_precision,
+                    quantity_precision: qty_precision,
                     timestamp: 0, // Coinbase snapshot does not provide a timestamp
+                    timestamp_unit: crate::load_config::TimestampUnit::Milliseconds,
                 };
 
                 // println!("ORDERBOOK {} ({}L)", common_symbol, bids.len() + asks.len());
@@ -436,12 +457,16 @@ fn process_coinbase_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_
                     }
                 };
 
+                // HFT: Get precision for updates
+                let price_precision = config.feed_config.get_price_precision(&common_symbol);
+                let qty_precision = config.feed_config.get_quantity_precision(&common_symbol);
+
                 let mut orderbooks = orderbooks.write();
                 if let Some(orderbook) = orderbooks.get_mut(&common_symbol) {
                     let timestamp = value.get("time")
                         .and_then(Value::as_str)
                         .and_then(|s| s.parse::<chrono::DateTime<chrono::Utc>>().ok())
-                        .map(|dt| dt.timestamp_millis())
+                        .map(|dt| dt.timestamp_millis().max(0) as u64)
                         .unwrap_or_default();
                     orderbook.timestamp = timestamp;
 
@@ -450,12 +475,16 @@ fn process_coinbase_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_
                             if let Some(change_arr) = change.as_array() {
                                 if change_arr.len() == 3 {
                                     let side = change_arr[0].as_str().unwrap_or_default();
-                                    let price = change_arr[1].as_str().and_then(|s| s.parse::<f64>().ok()).unwrap_or_default();
-                                    let quantity = change_arr[2].as_str().and_then(|s| s.parse::<f64>().ok()).unwrap_or_default();
+                                    let price = change_arr[1].as_str()
+                                        .map(|s| parse_to_scaled_or_default(s, price_precision))
+                                        .unwrap_or(0);
+                                    let quantity = change_arr[2].as_str()
+                                        .map(|s| parse_to_scaled_or_default(s, qty_precision))
+                                        .unwrap_or(0);
 
                                     if side == "buy" {
                                         let book_side = &mut orderbook.bids;
-                                        if quantity == 0.0 {
+                                        if quantity == 0 {
                                             book_side.retain(|(p, _)| *p != price);
                                         } else {
                                             if let Some(entry) = book_side.iter_mut().find(|(p, _)| *p == price) {
@@ -464,10 +493,10 @@ fn process_coinbase_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_
                                                 book_side.push((price, quantity));
                                             }
                                         }
-                                        book_side.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap());
+                                        book_side.sort_by(|a, b| b.0.cmp(&a.0));
                                     } else {
                                         let book_side = &mut orderbook.asks;
-                                        if quantity == 0.0 {
+                                        if quantity == 0 {
                                             book_side.retain(|(p, _)| *p != price);
                                         } else {
                                             if let Some(entry) = book_side.iter_mut().find(|(p, _)| *p == price) {
@@ -476,7 +505,7 @@ fn process_coinbase_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_
                                                 book_side.push((price, quantity));
                                             }
                                         }
-                                        book_side.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+                                        book_side.sort_by(|a, b| a.0.cmp(&b.0));
                                     }
                                 }
                             }

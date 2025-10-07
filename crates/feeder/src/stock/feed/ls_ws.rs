@@ -249,16 +249,19 @@ impl LSExchange {
                 .and_then(|v| v.as_str())
                 .and_then(|s| s.parse::<f64>().ok())
                 .unwrap_or(0.0);
-            
-            // Create OrderBookData with bid/ask levels
-            let orderbook_data = OrderBookData {
-                exchange: "LS".to_string(),
-                symbol: symbol.clone(),
-                asset_type: "stock".to_string(),
-                bids: vec![(bid_price, bid_size)],
-                asks: vec![(ask_price, ask_size)],
-                timestamp: chrono::Utc::now().timestamp_millis(),
-            };
+
+            // Create OrderBookData using from_f64 helper
+            let orderbook_data = OrderBookData::from_f64(
+                "LS".to_string(),
+                symbol.clone(),
+                "stock".to_string(),
+                vec![(bid_price, bid_size)],
+                vec![(ask_price, ask_size)],
+                8,  // price_precision
+                8,  // quantity_precision
+                chrono::Utc::now().timestamp_millis() as u64,
+                crate::load_config::TimestampUnit::Milliseconds,
+            );
 
             let market_data = MarketData {
                 exchange: "LS".to_string(),
@@ -298,15 +301,22 @@ impl LSExchange {
         // Parse stock trade data and send via UDP
         if let Some(body) = message.get("body") {
             let symbol = body.get("shcode").and_then(|v| v.as_str()).unwrap_or("").to_string();
-            
-            let trade_data = TradeData {
-                exchange: "LS".to_string(),
-                symbol: symbol.clone(),
-                asset_type: "stock".to_string(),
-                timestamp: chrono::Utc::now().timestamp_millis(),
-                price: body.get("price").and_then(|v| v.as_f64()).unwrap_or(0.0),
-                quantity: body.get("cvolume").and_then(|v| v.as_f64()).unwrap_or(0.0),
-            };
+
+            // Parse from f64 (stock feeds) and convert to scaled i64
+            let price_f64 = body.get("price").and_then(|v| v.as_f64()).unwrap_or(0.0);
+            let quantity_f64 = body.get("cvolume").and_then(|v| v.as_f64()).unwrap_or(0.0);
+
+            let trade_data = TradeData::from_f64(
+                "LS".to_string(),
+                symbol.clone(),
+                "stock".to_string(),
+                price_f64,
+                quantity_f64,
+                8,  // price_precision
+                8,  // quantity_precision
+                chrono::Utc::now().timestamp_millis() as u64,
+                crate::load_config::TimestampUnit::Milliseconds,
+            );
 
             let market_data = MarketData {
                 exchange: "LS".to_string(),

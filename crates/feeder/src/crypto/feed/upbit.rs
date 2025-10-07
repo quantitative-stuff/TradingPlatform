@@ -9,7 +9,7 @@ use std::time::Duration;
 use tracing::{debug, info, warn, error};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use crate::core::{Feeder, TRADES, ORDERBOOKS, SymbolMapper, COMPARE_NOTIFY, get_shutdown_receiver, TradeData, OrderBookData, CONNECTION_STATS};
+use crate::core::{Feeder, TRADES, ORDERBOOKS, SymbolMapper, COMPARE_NOTIFY, get_shutdown_receiver, TradeData, OrderBookData, CONNECTION_STATS, parse_to_scaled_or_default};
 use crate::error::{Result, Error};
 use crate::load_config::ExchangeConfig;
 
@@ -225,14 +225,15 @@ impl Feeder for UpbitExchange {
     async fn start(&mut self) -> Result<()> {
         // Reset connection counter
         self.active_connections.store(0, Ordering::SeqCst);
-        
+
         for ((asset_type, chunk_idx), ws_stream_opt) in self.ws_streams.iter_mut() {
             if let Some(mut ws_stream) = ws_stream_opt.take() {
                 let asset_type = asset_type.clone();
                 let chunk_idx = *chunk_idx;
                 let symbol_mapper = self.symbol_mapper.clone();
                 let active_connections = self.active_connections.clone();
-                
+                let config = self.config.clone();
+
                 // Increment active connection count
                 active_connections.fetch_add(1, Ordering::SeqCst);
                 
@@ -280,12 +281,12 @@ impl Feeder for UpbitExchange {
                             msg = ws_stream.next() => {
                                 match msg {
                                     Some(Ok(Message::Text(text))) => {
-                                        process_upbit_message(&text, symbol_mapper.clone(), &asset_type);
+                                        process_upbit_message(&text, symbol_mapper.clone(), &asset_type, &config);
                                     },
                                     Some(Ok(Message::Binary(data))) => {
                                         // Upbit sends binary data, decode it
                                         if let Ok(text) = String::from_utf8(data.to_vec()) {
-                                            process_upbit_message(&text, symbol_mapper.clone(), &asset_type);
+                                            process_upbit_message(&text, symbol_mapper.clone(), &asset_type, &config);
                                         } else {
                                             debug!("Failed to decode binary message from Upbit {} chunk {}", asset_type, chunk_idx);
                                         }
@@ -348,7 +349,7 @@ impl Feeder for UpbitExchange {
     }
 }
 
-fn process_upbit_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_type: &str) {
+fn process_upbit_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_type: &str, config: &ExchangeConfig) {
     let value: Value = match serde_json::from_str(text) {
         Ok(v) => v,
         Err(e) => {
@@ -384,9 +385,19 @@ fn process_upbit_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_typ
                 None => return,
             };
 
-            let price = value["trade_price"].as_f64().unwrap_or_default();
-            let quantity = value["trade_volume"].as_f64().unwrap_or_default();
-            let timestamp = value["trade_timestamp"].as_i64().unwrap_or_default();
+            // HFT: Get precision from config
+            let price_precision = config.feed_config.get_price_precision(&common_symbol);
+            let qty_precision = config.feed_config.get_quantity_precision(&common_symbol);
+
+            // HFT: Parse directly to scaled i64 (NO f64!)
+            // Upbit sends as JSON number (f64), so convert: (value * 10^precision) as i64
+            let price = value["trade_price"].as_f64()
+                .map(|v| (v * 10_f64.powi(price_precision as i32)) as i64)
+                .unwrap_or(0);
+            let quantity = value["trade_volume"].as_f64()
+                .map(|v| (v * 10_f64.powi(qty_precision as i32)) as i64)
+                .unwrap_or(0);
+            let timestamp = value["trade_timestamp"].as_i64().unwrap_or_default().max(0) as u64;
 
             debug!("TRADE {} @ {} x {}", common_symbol, price, quantity);
 
@@ -396,7 +407,10 @@ fn process_upbit_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_typ
                 asset_type: asset_type.to_string(),
                 price,
                 quantity,
+                price_precision,
+                quantity_precision: qty_precision,
                 timestamp,
+                timestamp_unit: crate::load_config::TimestampUnit::Milliseconds,
             };
 
             {
@@ -416,12 +430,12 @@ fn process_upbit_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_typ
             let original_symbol = value.get("code")
                 .and_then(|v| v.as_str())
                 .unwrap_or("");
-            
+
             if original_symbol.is_empty() {
                 debug!("Cannot determine symbol for Upbit orderbook message");
                 return;
             }
-            
+
             let common_symbol = match symbol_mapper.map("Upbit", original_symbol) {
                 Some(symbol) => symbol,
                 None => {
@@ -430,10 +444,14 @@ fn process_upbit_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_typ
                 }
             };
 
+            // HFT: Get precision BEFORE parsing orderbook
+            let price_precision = config.feed_config.get_price_precision(&common_symbol);
+            let qty_precision = config.feed_config.get_quantity_precision(&common_symbol);
+
             // Extract orderbook data
             let orderbook_units = value.get("orderbook_units")
                 .and_then(|v| v.as_array());
-                
+
             if let Some(units) = orderbook_units {
                 let orderbook = OrderBookData {
                     exchange: "Upbit".to_string(),
@@ -441,23 +459,29 @@ fn process_upbit_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_typ
                     asset_type: asset_type.to_string(),
                     bids: units.iter()
                         .filter_map(|unit| {
-                            Some((
-                                unit["bid_price"].as_f64()?,
-                                unit["bid_size"].as_f64()?
-                            ))
+                            let price = unit["bid_price"].as_f64()
+                                .map(|v| (v * 10_f64.powi(price_precision as i32)) as i64)?;
+                            let size = unit["bid_size"].as_f64()
+                                .map(|v| (v * 10_f64.powi(qty_precision as i32)) as i64)?;
+                            Some((price, size))
                         })
                         .collect(),
                     asks: units.iter()
                         .filter_map(|unit| {
-                            Some((
-                                unit["ask_price"].as_f64()?,
-                                unit["ask_size"].as_f64()?
-                            ))
+                            let price = unit["ask_price"].as_f64()
+                                .map(|v| (v * 10_f64.powi(price_precision as i32)) as i64)?;
+                            let size = unit["ask_size"].as_f64()
+                                .map(|v| (v * 10_f64.powi(qty_precision as i32)) as i64)?;
+                            Some((price, size))
                         })
                         .collect(),
-                    timestamp: value.get("timestamp").and_then(|v| v.as_i64()).unwrap_or_else(|| {
-                        chrono::Utc::now().timestamp_millis()
-                    }),
+                    price_precision,
+                    quantity_precision: qty_precision,
+                    timestamp: value.get("timestamp")
+                        .and_then(|v| v.as_i64())
+                        .map(|t| t.max(0) as u64)
+                        .unwrap_or_else(|| chrono::Utc::now().timestamp_millis() as u64),
+                    timestamp_unit: crate::load_config::TimestampUnit::Milliseconds,
                 };
 
                 {

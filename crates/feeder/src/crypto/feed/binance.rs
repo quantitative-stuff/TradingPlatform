@@ -11,6 +11,8 @@ use crate::core::{
     SymbolMapper, get_shutdown_receiver, CONNECTION_STATS,
     // NEW: Multi-port UDP sender
     MultiPortUdpSender, get_multi_port_sender,
+    // HFT: Direct string → scaled i64 parsing (NO f64!)
+    parse_to_scaled_or_default,
 };
 use crate::core::robust_connection::ExchangeConnectionLimits;
 use crate::error::{Result, Error};
@@ -230,7 +232,7 @@ impl Feeder for BinanceExchange {
     async fn start(&mut self) -> Result<()> {
         // Reset connection counter
         self.active_connections.store(0, Ordering::SeqCst);
-        
+
         for ((asset_type, chunk_idx), ws_stream_opt) in self.ws_streams.iter_mut() {
             if let Some(mut ws_stream) = ws_stream_opt.take() {
                 let asset_type = asset_type.clone();
@@ -238,6 +240,7 @@ impl Feeder for BinanceExchange {
                 let symbol_mapper = self.symbol_mapper.clone();
                 let active_connections = self.active_connections.clone();
                 let multi_port_sender = self.multi_port_sender.clone();
+                let config = self.config.clone();
 
                 // Increment active connection count
                 active_connections.fetch_add(1, Ordering::SeqCst);
@@ -293,7 +296,7 @@ impl Feeder for BinanceExchange {
                                             debug!("Binance depth message preview: {}", 
                                                 if text.len() > 200 { &text[..200] } else { &text });
                                         }
-                                        process_binance_message(&text, symbol_mapper.clone(), &asset_type, multi_port_sender.clone());
+                                        process_binance_message(&text, symbol_mapper.clone(), &asset_type, multi_port_sender.clone(), &config);
                                     },
                                     Some(Ok(Message::Ping(ping))) => {
                                         if let Err(e) = ws_stream.send(Message::Pong(ping)).await {
@@ -367,6 +370,7 @@ fn process_binance_message(
     symbol_mapper: Arc<SymbolMapper>,
     asset_type: &str,
     multi_port_sender: Option<Arc<MultiPortUdpSender>>,
+    config: &ExchangeConfig,
 ) {
     let value: Value = match serde_json::from_str(text) {
         Ok(v) => v,
@@ -448,28 +452,42 @@ fn process_binance_message(
 
             // println!("Binance: Receiving trade data for {}", common_symbol);
 
+            // HFT: Get precision from config (default to 8)
+            let price_precision = config.feed_config.get_price_precision(&common_symbol);
+            let quantity_precision = config.feed_config.get_quantity_precision(&common_symbol);
+
+            // HFT: Parse directly to scaled i64 (NO f64!)
+            let price = actual_data["p"].as_str()
+                .map(|s| parse_to_scaled_or_default(s, price_precision))
+                .unwrap_or(0);
+
+            let quantity = actual_data["q"].as_str()
+                .map(|s| parse_to_scaled_or_default(s, quantity_precision))
+                .unwrap_or(0);
+
             let trade = TradeData {
                 exchange: "Binance".to_string(),
                 symbol: common_symbol,  // Use mapped symbol
                 asset_type: asset_type.to_string(),
-                price: actual_data["p"].as_str()
-                    .and_then(|s| s.parse().ok())
-                    .unwrap_or_default(),
-                quantity: actual_data["q"].as_str()
-                    .and_then(|s| s.parse().ok())
-                    .unwrap_or_default(),
-                timestamp: actual_data["T"].as_i64()
+                price,
+                quantity,
+                price_precision,
+                quantity_precision,
+                timestamp: actual_data["T"]
+                    .as_i64()
+                    .and_then(|t| if t > 0 { Some(t as u64) } else { None })
                     .map(|t| {
                         // Validate and fix timestamp
                         let (is_valid, normalized) = crate::core::process_timestamp_field(t, "Binance");
                         if !is_valid {
                             // T field contains sequence number, use current time
-                            chrono::Utc::now().timestamp_millis()
+                            chrono::Utc::now().timestamp_millis() as u64
                         } else {
                             normalized
                         }
                     })
-                    .unwrap_or_else(|| chrono::Utc::now().timestamp_millis()),
+                    .unwrap_or_else(|| chrono::Utc::now().timestamp_millis() as u64),
+                timestamp_unit: crate::load_config::TimestampUnit::Milliseconds,
             };
 
             {
@@ -539,39 +557,48 @@ fn process_binance_message(
                 .and_then(|v| v.as_array());
                 
             if let Some(bids) = bids {
-                debug!("Processing Binance orderbook for {} ({}), asset_type: {}, bids: {}, asks: {}", 
-                    original_symbol, common_symbol, asset_type, 
-                    bids.len(), 
+                debug!("Processing Binance orderbook for {} ({}), asset_type: {}, bids: {}, asks: {}",
+                    original_symbol, common_symbol, asset_type,
+                    bids.len(),
                     asks.map(|a| a.len()).unwrap_or(0));
+
+                // HFT: Get precision from config
+                let price_precision = config.feed_config.get_price_precision(&common_symbol);
+                let qty_precision = config.feed_config.get_quantity_precision(&common_symbol);
+
                 let orderbook = OrderBookData {
                     exchange: "Binance".to_string(),
                     symbol: common_symbol,  // Use mapped symbol
                     asset_type: asset_type.to_string(),
                     bids: bids.iter()
                         .filter_map(|bid| {
-                            Some((
-                                bid[0].as_str()?.parse().ok()?,
-                                bid[1].as_str()?.parse().ok()?
-                            ))
+                            // HFT: Parse directly to scaled i64 (NO f64!)
+                            let price = parse_to_scaled_or_default(bid[0].as_str()?, price_precision);
+                            let qty = parse_to_scaled_or_default(bid[1].as_str()?, qty_precision);
+                            Some((price, qty))
                         })
                         .collect(),
                     asks: asks
                         .unwrap_or(&Vec::new())
                         .iter()
                         .filter_map(|ask| {
-                            Some((
-                                ask[0].as_str()?.parse().ok()?,
-                                ask[1].as_str()?.parse().ok()?
-                            ))
+                            // HFT: Parse directly to scaled i64 (NO f64!)
+                            let price = parse_to_scaled_or_default(ask[0].as_str()?, price_precision);
+                            let qty = parse_to_scaled_or_default(ask[1].as_str()?, qty_precision);
+                            Some((price, qty))
                         })
                         .collect(),
+                    price_precision,
+                    quantity_precision: qty_precision,
                     timestamp: actual_data.get("E")  // Event time for full depth
                         .and_then(|v| v.as_i64())
+                        .map(|t| t.max(0) as u64)
                         .unwrap_or_else(|| {
                             // Don't use lastUpdateId - it's a sequence number, not timestamp!
                             // For partial book depth without timestamp, use current time
-                            chrono::Utc::now().timestamp_millis()
+                            chrono::Utc::now().timestamp_millis() as u64
                         }),
+                    timestamp_unit: crate::load_config::TimestampUnit::Milliseconds,
                 };
 
                 {

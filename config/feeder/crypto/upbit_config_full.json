@@ -17,6 +17,7 @@
     "exchange": "upbit",
     "max_reconnect_attempts": 10,
     "max_symbols_per_connection": 12,
+    "timestamp_unit": "milliseconds",
     "reconnect_delay_seconds": 5
   },
   "output_dir": "data/upbit",

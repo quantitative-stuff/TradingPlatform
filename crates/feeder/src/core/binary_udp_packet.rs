@@ -122,7 +122,33 @@ impl PacketHeader {
 }
 
 impl OrderBookItem {
-    /// Create new OrderBook item with scaled price and quantity
+    /// Create new OrderBook item from already-scaled i64 values
+    /// Converts from variable precision to fixed 10^8 precision
+    pub fn new_from_scaled(price: i64, quantity: i64, price_precision: u8, qty_precision: u8) -> Self {
+        // Convert from variable precision to fixed 10^8 precision
+        let price_scaled = if price_precision < 8 {
+            price * 10_i64.pow(8 - price_precision as u32)
+        } else if price_precision > 8 {
+            price / 10_i64.pow(price_precision as u32 - 8)
+        } else {
+            price
+        };
+
+        let quantity_scaled = if qty_precision < 8 {
+            quantity * 10_i64.pow(8 - qty_precision as u32)
+        } else if qty_precision > 8 {
+            quantity / 10_i64.pow(qty_precision as u32 - 8)
+        } else {
+            quantity
+        };
+
+        OrderBookItem {
+            price: price_scaled,
+            quantity: quantity_scaled,
+        }
+    }
+
+    /// Create new OrderBook item with scaled price and quantity (legacy method for f64)
     pub fn new(price: f64, quantity: f64) -> Self {
         OrderBookItem {
             price: (price * 100_000_000.0) as i64,    // Scale by 10^8
@@ -154,7 +180,36 @@ impl OrderBookItem {
 }
 
 impl TradeItem {
-    /// Create new Trade item
+    /// Create new Trade item from already-scaled i64 values
+    /// Converts from variable precision to fixed 10^8 precision
+    pub fn new_from_scaled(trade_id: u64, price: i64, quantity: i64, price_precision: u8, qty_precision: u8, is_buy: bool) -> Self {
+        // Convert from variable precision to fixed 10^8 precision
+        let price_scaled = if price_precision < 8 {
+            price * 10_i64.pow(8 - price_precision as u32)
+        } else if price_precision > 8 {
+            price / 10_i64.pow(price_precision as u32 - 8)
+        } else {
+            price
+        };
+
+        let quantity_scaled = if qty_precision < 8 {
+            quantity * 10_i64.pow(8 - qty_precision as u32)
+        } else if qty_precision > 8 {
+            quantity / 10_i64.pow(qty_precision as u32 - 8)
+        } else {
+            quantity
+        };
+
+        TradeItem {
+            trade_id,
+            price: price_scaled,
+            quantity: quantity_scaled,
+            side: if is_buy { 1 } else { 0 },
+            reserved: [0; 7],
+        }
+    }
+
+    /// Create new Trade item (legacy method for f64)
     pub fn new(trade_id: u64, price: f64, quantity: f64, is_buy: bool) -> Self {
         TradeItem {
             trade_id,
@@ -214,14 +269,8 @@ impl BinaryUdpPacket {
     pub fn from_trade(trade: &TradeData) -> Self {
         let mut packet = BinaryUdpPacket::new();
 
-        // Set header - handle timestamp conversion safely
-        // If timestamp is already in nanoseconds (> 1e15), use as-is
-        // If in milliseconds (< 1e13), convert to nanoseconds
-        packet.header.exchange_timestamp = if trade.timestamp > 1_000_000_000_000_000 {
-            trade.timestamp as u64 // Already in nanoseconds
-        } else {
-            (trade.timestamp.saturating_mul(1_000_000)) as u64 // Convert ms to ns with overflow protection
-        };
+        // Set header - convert timestamp to nanoseconds based on exchange's timestamp unit
+        packet.header.exchange_timestamp = trade.timestamp_unit.to_nanoseconds(trade.timestamp);
         packet.header.local_timestamp = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
@@ -230,12 +279,14 @@ impl BinaryUdpPacket {
         packet.header.set_exchange(&trade.exchange);
         packet.header.set_flags_and_count(true, 1, false, 1); // is_last=true, packet_type=1 (Trade), is_bid=false, count=1
 
-        // Create trade item
-        let mut trade_item = TradeItem::new(
+        // Create trade item from already-scaled i64 values
+        let mut trade_item = TradeItem::new_from_scaled(
             0, // trade_id - could be derived from timestamp
             trade.price,
             trade.quantity,
-            trade.quantity > 0.0, // Simple buy/sell detection
+            trade.price_precision,
+            trade.quantity_precision,
+            trade.quantity > 0, // Simple buy/sell detection (i64 comparison)
         );
         trade_item.to_network_order();
 
@@ -255,14 +306,8 @@ impl BinaryUdpPacket {
     pub fn from_orderbook(orderbook: &OrderBookData, is_bid: bool) -> Self {
         let mut packet = BinaryUdpPacket::new();
 
-        // Set header - handle timestamp conversion safely
-        // If timestamp is already in nanoseconds (> 1e15), use as-is
-        // If in milliseconds (< 1e13), convert to nanoseconds
-        packet.header.exchange_timestamp = if orderbook.timestamp > 1_000_000_000_000_000 {
-            orderbook.timestamp as u64 // Already in nanoseconds
-        } else {
-            (orderbook.timestamp.saturating_mul(1_000_000)) as u64 // Convert ms to ns with overflow protection
-        };
+        // Set header - convert timestamp to nanoseconds based on exchange's timestamp unit
+        packet.header.exchange_timestamp = orderbook.timestamp_unit.to_nanoseconds(orderbook.timestamp);
         packet.header.local_timestamp = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
@@ -276,9 +321,14 @@ impl BinaryUdpPacket {
 
         packet.header.set_flags_and_count(true, 2, is_bid, count); // is_last=true, packet_type=2 (OrderBook), is_bid, count
 
-        // Add orderbook items to payload
+        // Add orderbook items to payload (already scaled i64 values)
         for &(price, quantity) in levels.iter().take(7) {
-            let mut item = OrderBookItem::new(price, quantity);
+            let mut item = OrderBookItem::new_from_scaled(
+                price,
+                quantity,
+                orderbook.price_precision,
+                orderbook.quantity_precision
+            );
             item.to_network_order();
 
             let item_bytes = unsafe {
