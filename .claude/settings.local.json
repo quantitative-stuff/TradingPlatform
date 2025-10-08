@@ -7,7 +7,8 @@
       "Bash(for:*)",
       "Bash(do)",
       "Bash(echo:*)",
-      "Bash(cargo check:*)"
+      "Bash(cargo check:*)",
+      "Read(//d/Works/Github/TradingPlatform/logs/**)"
     ],
     "deny": [],
     "ask": []
