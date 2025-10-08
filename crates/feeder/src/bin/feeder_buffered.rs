@@ -77,7 +77,7 @@ async fn run_feeder_buffered() -> Result<()> {
     // Initialize file logging only (no terminal output)
     let file_logger = FileLogger::new();
     if let Err(e) = file_logger.init() {
-        eprintln!("Failed to initialize file logger: {}", e);
+        error!("Failed to initialize file logger: {}", e);
         return Err(anyhow::anyhow!("Failed to initialize logging"));
     }
 
@@ -690,6 +690,7 @@ async fn spawn_bithumb_exchange(
 #[tokio::main]
 async fn main() {
     if let Err(e) = run_feeder_buffered().await {
-        eprintln!("Feeder buffered failed: {}", e);
+        error!("Feeder buffered failed: {}", e);
+        eprintln!("\n❌ CRITICAL ERROR: {}\nCheck logs for details.\n", e);
     }
 }

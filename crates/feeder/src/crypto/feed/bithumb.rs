@@ -431,7 +431,7 @@ fn process_bithumb_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_t
                     price_precision,
                     quantity_precision: qty_precision,
                     timestamp,
-                    timestamp_unit: crate::load_config::TimestampUnit::Milliseconds,
+                    timestamp_unit: config.feed_config.timestamp_unit,
                 };
 
                 {
@@ -513,7 +513,7 @@ fn process_bithumb_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_t
                         price_precision,
                         quantity_precision: qty_precision,
                         timestamp,
-                        timestamp_unit: crate::load_config::TimestampUnit::Milliseconds,
+                        timestamp_unit: config.feed_config.timestamp_unit,
                     };
 
                     {

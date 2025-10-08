@@ -20,11 +20,38 @@ pub enum TimestampUnit {
 impl TimestampUnit {
     /// Convert timestamp to nanoseconds for internal storage
     pub fn to_nanoseconds(&self, timestamp: u64) -> u64 {
-        match self {
-            TimestampUnit::Seconds => timestamp * 1_000_000_000,
-            TimestampUnit::Milliseconds => timestamp * 1_000_000,
-            TimestampUnit::Microseconds => timestamp * 1_000,
-            TimestampUnit::Nanoseconds => timestamp,
+        // Add overflow detection to find which exchange has wrong config
+        let result = match self {
+            TimestampUnit::Seconds => timestamp.checked_mul(1_000_000_000),
+            TimestampUnit::Milliseconds => timestamp.checked_mul(1_000_000),
+            TimestampUnit::Microseconds => timestamp.checked_mul(1_000),
+            TimestampUnit::Nanoseconds => Some(timestamp),
+        };
+
+        match result {
+            Some(nanos) => nanos,
+            None => {
+                // Log the overflow with context so we can identify the exchange
+                tracing::error!("⚠️  TIMESTAMP OVERFLOW DETECTED!");
+                tracing::error!("   Input timestamp: {}", timestamp);
+                tracing::error!("   Attempted conversion: {:?} -> Nanoseconds", self);
+                tracing::error!("   This likely means the exchange config has wrong timestamp_unit");
+                tracing::error!("   Timestamp looks like it's already in: {}", Self::detect_likely_unit(timestamp));
+                panic!("Fix the exchange config file with correct timestamp_unit!");
+            }
+        }
+    }
+
+    /// Detect what unit a timestamp is likely in based on its magnitude
+    fn detect_likely_unit(timestamp: u64) -> &'static str {
+        if timestamp < 10_000_000_000 {
+            "Seconds (10-digit Unix timestamp)"
+        } else if timestamp < 10_000_000_000_000 {
+            "Milliseconds (13-digit timestamp)"
+        } else if timestamp < 10_000_000_000_000_000 {
+            "Microseconds (16-digit timestamp)"
+        } else {
+            "Nanoseconds (19-digit timestamp)"
         }
     }
 

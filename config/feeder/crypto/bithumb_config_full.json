@@ -14,7 +14,7 @@
     "exchange": "bithumb",
     "max_reconnect_attempts": 10,
     "max_symbols_per_connection": 5,
-    "timestamp_unit": "milliseconds",
+    "timestamp_unit": "microseconds",
     "reconnect_delay_seconds": 5
   },
   "output_dir": "data/bithumb",

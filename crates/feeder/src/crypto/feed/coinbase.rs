@@ -360,7 +360,7 @@ fn process_coinbase_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_
                     price_precision,
                     quantity_precision: qty_precision,
                     timestamp,
-                    timestamp_unit: crate::load_config::TimestampUnit::Milliseconds,
+                    timestamp_unit: config.feed_config.timestamp_unit,
                 };
 
                 {
@@ -427,7 +427,7 @@ fn process_coinbase_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_
                     price_precision,
                     quantity_precision: qty_precision,
                     timestamp: 0, // Coinbase snapshot does not provide a timestamp
-                    timestamp_unit: crate::load_config::TimestampUnit::Milliseconds,
+                    timestamp_unit: config.feed_config.timestamp_unit,
                 };
 
                 // println!("ORDERBOOK {} ({}L)", common_symbol, bids.len() + asks.len());

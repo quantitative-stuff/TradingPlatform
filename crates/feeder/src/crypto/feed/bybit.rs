@@ -541,7 +541,7 @@ fn process_bybit_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_typ
                 price_precision,
                 quantity_precision,
                 timestamp,
-                timestamp_unit: crate::load_config::TimestampUnit::Milliseconds,
+                timestamp_unit: config.feed_config.timestamp_unit,
             };
 
             {
@@ -627,7 +627,7 @@ fn process_bybit_trade(trade_data: &Value, symbol_mapper: &Arc<SymbolMapper>, as
         price_precision,
         quantity_precision,
         timestamp,
-        timestamp_unit: crate::load_config::TimestampUnit::Milliseconds,
+        timestamp_unit: config.feed_config.timestamp_unit,
     };
 
     {

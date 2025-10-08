@@ -410,7 +410,7 @@ fn process_upbit_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_typ
                 price_precision,
                 quantity_precision: qty_precision,
                 timestamp,
-                timestamp_unit: crate::load_config::TimestampUnit::Milliseconds,
+                timestamp_unit: config.feed_config.timestamp_unit,
             };
 
             {
@@ -481,7 +481,7 @@ fn process_upbit_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_typ
                         .and_then(|v| v.as_i64())
                         .map(|t| t.max(0) as u64)
                         .unwrap_or_else(|| chrono::Utc::now().timestamp_millis() as u64),
-                    timestamp_unit: crate::load_config::TimestampUnit::Milliseconds,
+                    timestamp_unit: config.feed_config.timestamp_unit,
                 };
 
                 {

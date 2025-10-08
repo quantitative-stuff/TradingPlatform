@@ -27,7 +27,8 @@
     "asset_type": ["spot"],
     "exchange": "bithumb",
     "feed_data_type": ["trade", "orderbook"],
-    "max_symbols_per_connection": 5
+    "max_symbols_per_connection": 5,
+    "timestamp_unit": "microseconds"
   },
   "rate_limits": {
     "requests_per_second": 5,

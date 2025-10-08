@@ -26,10 +26,10 @@ impl MarketDataComparator {
     // }
 
     pub fn compare_trades(&self, symbol: &str) {
-        println!("Comparing trades for symbol: {}", symbol);  // Debug print
+        tracing::debug!("Comparing trades for symbol: {}", symbol);
 
         let trades = TRADES.read();
-        println!("Number of trades in storage: {}", trades.len());  // Debug print
+        tracing::debug!("Number of trades in storage: {}", trades.len());
 
         // Get latest trade per exchange by timestamp
         let mut latest_trades: HashMap<String, &TradeData> = HashMap::new();
@@ -45,7 +45,7 @@ impl MarketDataComparator {
                 _ => {}
             }
         }
-        println!("Number of exchanges with trades: {}", latest_trades.len());  // Debug print
+        tracing::debug!("Number of exchanges with trades: {}", latest_trades.len());
 
         if latest_trades.len() >= 2 {
             let trades_vec: Vec<_> = latest_trades.iter().collect();
@@ -75,11 +75,11 @@ impl MarketDataComparator {
                     };
 
                     if let Err(e) = FileStorage::store_spread(&spread_data) {
-                        eprintln!("Failed to store spread data: {}", e);
+                        tracing::error!("Failed to store spread data: {}", e);
                     }
 
-                    // Also print to console
-                    println!("Trade spread for {} between {} and {}: {:.2}%", 
+                    // Log spread data
+                    tracing::info!("Trade spread for {} between {} and {}: {:.2}%",
                         symbol, exchange1, exchange2, spread_percent);
                 }
             }
@@ -105,13 +105,13 @@ impl MarketDataComparator {
         }
 
         if latest_orderbooks.len() >= 2 {
-            println!("Latest orderbook data for {} at {}", symbol, Utc::now());
+            tracing::debug!("Latest orderbook data for {} at {}", symbol, Utc::now());
             for (exchange, ob) in &latest_orderbooks {
                 let best_bid_i64 = ob.bids.first().map_or(0, |&(price, _)| price);
                 let best_ask_i64 = ob.asks.first().map_or(0, |&(price, _)| price);
                 let best_bid = ob.unscale_price(best_bid_i64);
                 let best_ask = ob.unscale_price(best_ask_i64);
-                println!("  {}: Bid {} / Ask {} (timestamp: {})",
+                tracing::debug!("  {}: Bid {} / Ask {} (timestamp: {})",
                     exchange,
                     best_bid,
                     best_ask,

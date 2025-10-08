@@ -32,12 +32,12 @@ impl TerminalMonitor {
             return Ok(());
         }
 
-        println!("╔════════════════════════════════════════════════════════════════╗");
-        println!("║         WebSocket Feeder - Real-time Market Data Monitor      ║");
-        println!("╚════════════════════════════════════════════════════════════════╝");
-        println!();
-        println!("Terminal display enabled. Data will appear once connections are established.");
-        println!();
+        tracing::debug!("╔════════════════════════════════════════════════════════════════╗");
+        tracing::debug!("║         WebSocket Feeder - Real-time Market Data Monitor      ║");
+        tracing::debug!("╚════════════════════════════════════════════════════════════════╝");
+        tracing::debug!("");
+        tracing::debug!("Terminal display enabled. Data will appear once connections are established.");
+        tracing::debug!("");
 
         let refresh_interval = self.refresh_interval;
         let last_update = self.last_update.clone();
@@ -76,8 +76,8 @@ impl TerminalMonitor {
                 Self::print_orderbooks();
                 Self::print_summary();
 
-                println!("\n{}", "=".repeat(120));
-                println!("Last update: {} | Refresh: {}s | Terminal Monitor Active", 
+                tracing::debug!("\n{}", "=".repeat(120));
+                tracing::debug!("Last update: {} | Refresh: {}s | Terminal Monitor Active",
                          chrono::Local::now().format("%H:%M:%S"),
                          refresh_interval.as_secs());
 
@@ -96,14 +96,14 @@ impl TerminalMonitor {
     pub fn stop(&mut self) {
         if let Some(handle) = self.monitor_handle.take() {
             handle.abort();
-            println!("\nTerminal monitor stopped.");
+            tracing::debug!("\nTerminal monitor stopped.");
         }
     }
 
     /// Print a connection event
     pub fn log_connection_event(exchange: &str, event: &str) {
         if Self::is_terminal_mode() {
-            println!("[{}] {} WebSocket: {}", 
+            tracing::debug!("[{}] {} WebSocket: {}",
                      chrono::Local::now().format("%H:%M:%S"),
                      exchange,
                      event);
@@ -128,25 +128,25 @@ impl TerminalMonitor {
     }
 
     fn print_header() {
-        println!("\n{}", "=".repeat(120));
-        println!("{:^120}", "WebSocket Feeder - Active Connections & Market Data");
-        println!("{}", "=".repeat(120));
+        tracing::debug!("\n{}", "=".repeat(120));
+        tracing::debug!("{:^120}", "WebSocket Feeder - Active Connections & Market Data");
+        tracing::debug!("{}", "=".repeat(120));
     }
 
     fn print_connection_stats() {
         let stats = CONNECTION_STATS.read();
-        
+
         if stats.is_empty() {
-            println!("\n⏳ No WebSocket connections established yet...");
+            tracing::debug!("\n⏳ No WebSocket connections established yet...");
             return;
         }
-        
-        println!("\n📡 WebSocket Connection Status:");
-        println!("{:-<120}", "");
-        println!("{:<15} | {:>10} | {:>12} | {:>10} | {:<50}", 
+
+        tracing::debug!("\n📡 WebSocket Connection Status:");
+        tracing::debug!("{:-<120}", "");
+        tracing::debug!("{:<15} | {:>10} | {:>12} | {:>10} | {:<50}",
                  "Exchange", "Connected", "Disconnected", "Total", "Status");
-        println!("{:-<120}", "");
-        
+        tracing::debug!("{:-<120}", "");
+
         for (exchange, stat) in stats.iter() {
             let status = if stat.connected > 0 {
                 format!("✓ Active ({} connections)", stat.connected)
@@ -155,33 +155,33 @@ impl TerminalMonitor {
             } else {
                 "⏳ Connecting...".to_string()
             };
-            
+
             let status_color = if stat.connected > 0 {
                 status
             } else {
                 status
             };
-            
-            println!("{:<15} | {:>10} | {:>12} | {:>10} | {:<50}", 
+
+            tracing::debug!("{:<15} | {:>10} | {:>12} | {:>10} | {:<50}",
                      exchange, stat.connected, stat.disconnected, stat.total_connections, status_color);
         }
     }
 
     fn print_trades() {
         let trades = TRADES.read();
-        
+
         if trades.is_empty() {
             return;
         }
-        
-        println!("\n📈 Recent Trades (Last 5):");
-        println!("{:-<120}", "");
-        println!("{:<10} | {:<12} | {:>12} | {:>12} | {:>12} | {:<20}", 
+
+        tracing::debug!("\n📈 Recent Trades (Last 5):");
+        tracing::debug!("{:-<120}", "");
+        tracing::debug!("{:<10} | {:<12} | {:>12} | {:>12} | {:>12} | {:<20}",
                  "Exchange", "Symbol", "Price", "Quantity", "Value", "Time");
-        println!("{:-<120}", "");
-        
+        tracing::debug!("{:-<120}", "");
+
         let recent_trades: Vec<_> = trades.iter().rev().take(5).collect();
-        
+
         for trade in recent_trades {
             let time = chrono::DateTime::<chrono::Utc>::from_timestamp_millis(trade.timestamp as i64)
                 .map(|dt| dt.format("%H:%M:%S").to_string())
@@ -192,26 +192,26 @@ impl TerminalMonitor {
             let quantity_f64 = trade.get_quantity_f64();
             let value = price_f64 * quantity_f64;
 
-            println!("{:<10} | {:<12} | {:>12.4} | {:>12.4} | {:>12.2} | {:<20}",
+            tracing::debug!("{:<10} | {:<12} | {:>12.4} | {:>12.4} | {:>12.2} | {:<20}",
                      trade.exchange, trade.symbol, price_f64, quantity_f64, value, time);
         }
     }
 
     fn print_orderbooks() {
         let orderbooks = ORDERBOOKS.read();
-        
+
         if orderbooks.is_empty() {
             return;
         }
-        
-        println!("\n📊 Order Books (Last 5):");
-        println!("{:-<120}", "");
-        println!("{:<10} | {:<12} | {:>12} | {:>12} | {:>10} | {:>8} | {:>8}", 
+
+        tracing::debug!("\n📊 Order Books (Last 5):");
+        tracing::debug!("{:-<120}", "");
+        tracing::debug!("{:<10} | {:<12} | {:>12} | {:>12} | {:>10} | {:>8} | {:>8}",
                  "Exchange", "Symbol", "Bid", "Ask", "Spread(bp)", "BidDepth", "AskDepth");
-        println!("{:-<120}", "");
-        
+        tracing::debug!("{:-<120}", "");
+
         let recent_books: Vec<_> = orderbooks.iter().rev().take(5).collect();
-        
+
         for ob in recent_books {
             // Convert scaled i64 to f64 for display
             let best_bid_i64 = ob.bids.first().map(|b| b.0).unwrap_or(0);
@@ -227,7 +227,7 @@ impl TerminalMonitor {
                 0.0
             };
 
-            println!("{:<10} | {:<12} | {:>12.4} | {:>12.4} | {:>10.1} | {:>8} | {:>8}",
+            tracing::debug!("{:<10} | {:<12} | {:>12.4} | {:>12.4} | {:>10.1} | {:>8} | {:>8}",
                      ob.exchange, ob.symbol, best_bid, best_ask, spread, bid_depth, ask_depth);
         }
     }
@@ -235,39 +235,39 @@ impl TerminalMonitor {
     fn print_summary() {
         let trades = TRADES.read();
         let orderbooks = ORDERBOOKS.read();
-        
-        println!("\n📊 Data Summary:");
-        println!("{:-<120}", "");
-        
+
+        tracing::debug!("\n📊 Data Summary:");
+        tracing::debug!("{:-<120}", "");
+
         let mut trade_counts: HashMap<String, usize> = HashMap::new();
         let mut ob_counts: HashMap<String, usize> = HashMap::new();
-        
+
         for trade in trades.iter() {
             *trade_counts.entry(trade.exchange.clone()).or_insert(0) += 1;
         }
-        
+
         for ob in orderbooks.iter() {
             *ob_counts.entry(ob.exchange.clone()).or_insert(0) += 1;
         }
-        
-        println!("{:<15} | {:>20} | {:>20} | {:>20}", 
+
+        tracing::debug!("{:<15} | {:>20} | {:>20} | {:>20}",
                  "Exchange", "Trades", "OrderBooks", "Total Updates");
-        println!("{:-<80}", "");
-        
+        tracing::debug!("{:-<80}", "");
+
         let all_exchanges: std::collections::HashSet<_> = trade_counts.keys()
             .chain(ob_counts.keys())
             .collect();
-        
+
         for exchange in all_exchanges {
             let trade_count = trade_counts.get(exchange).unwrap_or(&0);
             let ob_count = ob_counts.get(exchange).unwrap_or(&0);
             let total = trade_count + ob_count;
-            println!("{:<15} | {:>20} | {:>20} | {:>20}", 
+            tracing::debug!("{:<15} | {:>20} | {:>20} | {:>20}",
                      exchange, trade_count, ob_count, total);
         }
-        
-        println!("{:-<80}", "");
-        println!("{:<15} | {:>20} | {:>20} | {:>20}", 
+
+        tracing::debug!("{:-<80}", "");
+        tracing::debug!("{:<15} | {:>20} | {:>20} | {:>20}",
                  "Total", trades.len(), orderbooks.len(), trades.len() + orderbooks.len());
     }
 

@@ -447,7 +447,7 @@ fn process_okx_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_type:
                                 price_precision,
                                 quantity_precision: qty_precision,
                                 timestamp,
-                                timestamp_unit: crate::load_config::TimestampUnit::Milliseconds,
+                                timestamp_unit: config.feed_config.timestamp_unit,
                             };
 
                             {
@@ -544,7 +544,7 @@ fn process_okx_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_type:
                                 price_precision,
                                 quantity_precision: qty_precision,
                                 timestamp,
-                                timestamp_unit: crate::load_config::TimestampUnit::Milliseconds,
+                                timestamp_unit: config.feed_config.timestamp_unit,
                             };
 
                             {

@@ -25,7 +25,7 @@ async fn run_feeder_direct() -> Result<()> {
     // Initialize file logging only (no terminal output)
     let file_logger = FileLogger::new();
     if let Err(e) = file_logger.init() {
-        eprintln!("Failed to initialize file logger: {}", e);
+        error!("Failed to initialize file logger: {}", e);
         return Err(anyhow::anyhow!("Failed to initialize logging"));
     }
 
@@ -33,10 +33,8 @@ async fn run_feeder_direct() -> Result<()> {
     let use_limited_config = std::env::var("USE_LIMITED_CONFIG").is_ok();
     if use_limited_config {
         info!("Using LIMITED configuration files (USE_LIMITED_CONFIG is set)");
-        println!("Using LIMITED configuration files with fewer symbols for testing");
     } else {
         info!("Using FULL configuration files (default, set USE_LIMITED_CONFIG=1 for limited configs)");
-        println!("Using FULL configuration files");
     }
 
     // Read exchanges from config file
@@ -170,7 +168,7 @@ async fn run_feeder_direct() -> Result<()> {
             "okx" => {
                 let config_file = if use_limited_config { "okx_config.json" } else { "okx_config_full.json" };
                 let config_path = config_dir.join(config_file);
-                println!("Loading OKX config from: {:?}", config_path);
+                tracing::debug!("Loading OKX config from: {:?}", config_path);
                 match ExtendedExchangeConfig::load_full_config(config_path.to_str().unwrap()) {
                     Ok(config) => {
                     info!("Starting OKX with {} spot + {} futures symbols",
@@ -181,7 +179,6 @@ async fn run_feeder_direct() -> Result<()> {
                     },
                     Err(e) => {
                         error!("Failed to load OKX config from {:?}: {}", config_path, e);
-                        println!("Failed to load OKX config: {}", e);
                     }
                 }
             },
@@ -200,12 +197,12 @@ async fn run_feeder_direct() -> Result<()> {
             },
             "bithumb" => {
                 let config_file = if use_limited_config { "bithumb_config.json" } else { "bithumb_config_full.json" };
-                println!("Loading Bithumb config from: {}", config_file);
+                tracing::debug!("Loading Bithumb config from: {}", config_file);
                 match ExtendedExchangeConfig::load_full_config(
                     config_dir.join(config_file).to_str().unwrap()
                 ) {
                     Ok(config) => {
-                        println!("Bithumb config loaded - spot_symbols: {:?}", config.spot_symbols);
+                        tracing::debug!("Bithumb config loaded - spot_symbols: {:?}", config.spot_symbols);
                         info!("Starting Bithumb with {} spot symbols", config.spot_symbols.len());
 
                         let handle = spawn_bithumb_exchange(config, symbol_mapper.clone()).await;
@@ -213,7 +210,6 @@ async fn run_feeder_direct() -> Result<()> {
                     }
                     Err(e) => {
                         error!("Failed to load Bithumb config: {}", e);
-                        println!("Failed to load Bithumb config: {}", e);
                     }
                 }
             },
@@ -311,6 +307,7 @@ async fn run_feeder_direct() -> Result<()> {
 #[tokio::main]
 async fn main() {
     if let Err(e) = run_feeder_direct().await {
-        eprintln!("Feeder direct failed: {}", e);
+        error!("Feeder direct failed: {}", e);
+        eprintln!("\n❌ CRITICAL ERROR: {}\nCheck logs for details.\n", e);
     }
 }

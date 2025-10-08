@@ -487,7 +487,7 @@ fn process_binance_message(
                         }
                     })
                     .unwrap_or_else(|| chrono::Utc::now().timestamp_millis() as u64),
-                timestamp_unit: crate::load_config::TimestampUnit::Milliseconds,
+                timestamp_unit: config.feed_config.timestamp_unit,
             };
 
             {
@@ -598,7 +598,7 @@ fn process_binance_message(
                             // For partial book depth without timestamp, use current time
                             chrono::Utc::now().timestamp_millis() as u64
                         }),
-                    timestamp_unit: crate::load_config::TimestampUnit::Milliseconds,
+                    timestamp_unit: config.feed_config.timestamp_unit,
                 };
 
                 {
