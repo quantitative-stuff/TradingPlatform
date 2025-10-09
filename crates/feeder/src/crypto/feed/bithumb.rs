@@ -354,16 +354,16 @@ fn process_bithumb_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_t
     // Check for status messages
     if let Some(status) = value.get("status").and_then(Value::as_str) {
         if status == "0000" {
-            debug!("Bithumb subscription successful - status: {}", status);
+            info!("Bithumb subscription successful - status: {} - Message: {}", status, text);
         } else {
-            info!("Bithumb status: {} - Full message: {}", status, text);
+            warn!("Bithumb status: {} - Full message: {}", status, text);
         }
         return;
     }
 
     // Check for resmsg (response message)
     if let Some(resmsg) = value.get("resmsg").and_then(Value::as_str) {
-        debug!("Bithumb response: {}", resmsg);
+        info!("Bithumb response: {} - Full message: {}", resmsg, text);
         return;
     }
 
@@ -373,7 +373,7 @@ fn process_bithumb_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_t
         .unwrap_or("");
 
     if !msg_type.is_empty() {
-        debug!("Bithumb message type: {} (total: {})", msg_type, count);
+        info!("Bithumb message type: {} (total: {})", msg_type, count);
 
         match msg_type {
             "trade" => {

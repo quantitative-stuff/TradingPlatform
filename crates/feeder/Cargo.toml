@@ -8,6 +8,8 @@ edition.workspace = true
 market-types = { path = "../market-types" }
 udp-protocol = { path = "../udp-protocol" }
 database = { path = "../database" }
+matching-engine = { path = "../matching-engine" }
+feature-engineering = { path = "../feature-engineering" }
 
 # Core async runtime and networking
 tokio = { workspace = true }
