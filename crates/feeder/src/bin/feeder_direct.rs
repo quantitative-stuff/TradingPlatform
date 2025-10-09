@@ -54,6 +54,20 @@ async fn run_feeder_direct() -> Result<()> {
 
     info!("Starting direct feeder with exchanges: {:?}", selected_exchanges);
 
+    // Initialize BINARY UDP sender FIRST (using binary packet format from udp_packet.md)
+    if let Err(e) = init_global_binary_udp_sender("0.0.0.0:0", MONITOR_ENDPOINT).await {
+        error!("Failed to initialize binary UDP sender: {}", e);
+        return Err(anyhow::anyhow!("Failed to initialize binary UDP sender"));
+    }
+    info!("✅ Binary UDP sender initialized (66-byte headers + binary payload)");
+
+    // Initialize MULTI-PORT UDP sender BEFORE creating exchanges (proportional 20-address architecture)
+    if let Err(e) = init_global_multi_port_sender() {
+        error!("Failed to initialize multi-port UDP sender: {}", e);
+        return Err(anyhow::anyhow!("Failed to initialize multi-port UDP sender"));
+    }
+    info!("✅ Multi-Port UDP sender initialized (20 addresses: Binance 40%, others 10% each)");
+
     // Set up config directory for exchange configs
     // Config files are in workspace root at config/feeder/crypto/
     let config_dir = PathBuf::from("config")
@@ -223,20 +237,6 @@ async fn run_feeder_direct() -> Result<()> {
         error!("No exchanges started successfully");
         return Err(anyhow::anyhow!("No exchanges started"));
     }
-
-    // Initialize BINARY UDP sender (using binary packet format from udp_packet.md)
-    if let Err(e) = init_global_binary_udp_sender("0.0.0.0:0", MONITOR_ENDPOINT).await {
-        error!("Failed to initialize binary UDP sender: {}", e);
-        return Err(anyhow::anyhow!("Failed to initialize binary UDP sender"));
-    }
-    info!("✅ Binary UDP sender initialized (66-byte headers + binary payload)");
-
-    // Initialize MULTI-PORT UDP sender (proportional 20-address architecture)
-    if let Err(e) = init_global_multi_port_sender() {
-        error!("Failed to initialize multi-port UDP sender: {}", e);
-        return Err(anyhow::anyhow!("Failed to initialize multi-port UDP sender"));
-    }
-    info!("✅ Multi-Port UDP sender initialized (20 addresses: Binance 40%, others 10% each)");
 
     // Send startup notification
     if let Some(sender) = get_binary_udp_sender() {
