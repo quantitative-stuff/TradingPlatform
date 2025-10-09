@@ -20,19 +20,19 @@ const USE_MULTI_PORT_UDP: bool = true;
 pub struct BybitExchange {
     config: ExchangeConfig,
     symbol_mapper: Arc<SymbolMapper>,
-    // Map of (asset_type, chunk_index) -> WebSocket connection
-    // Each connection handles up to 5 symbols with both trade and orderbook streams
-    ws_streams: HashMap<(String, usize), Option<WebSocketStream<MaybeTlsStream<tokio::net::TcpStream>>>>,
+    // Map of (asset_type, stream_type, chunk_index) -> WebSocket connection
+    // Each connection handles up to 10 symbols for either trade OR orderbook
+    ws_streams: HashMap<(String, String, usize), Option<WebSocketStream<MaybeTlsStream<tokio::net::TcpStream>>>>,
     // Track active connections for proper reconnection
     active_connections: Arc<AtomicUsize>,
 }
 
 impl BybitExchange {
     pub fn new(config: ExchangeConfig, symbol_mapper: Arc<SymbolMapper>) -> Self {
-        const SYMBOLS_PER_CONNECTION: usize = 5;
+        const SYMBOLS_PER_CONNECTION: usize = 10;
         let mut ws_streams = HashMap::new();
-        
-        // Initialize connections for each asset type
+
+        // Initialize separate connections for trade and orderbook streams
         for asset_type in &config.feed_config.asset_type {
             let symbols = if asset_type == "spot" {
                 &config.subscribe_data.spot_symbols
@@ -43,14 +43,20 @@ impl BybitExchange {
             let num_symbols = symbols.len();
             let num_chunks = (num_symbols + SYMBOLS_PER_CONNECTION - 1) / SYMBOLS_PER_CONNECTION;
 
-            for chunk_idx in 0..num_chunks {
-                ws_streams.insert(
-                    (asset_type.clone(), chunk_idx),
-                    None
-                );
+            debug!("Bybit constructor - {} {} symbols, {} per connection = {} connections per stream type",
+                asset_type, num_symbols, SYMBOLS_PER_CONNECTION, num_chunks);
+
+            // Initialize separate connections for trade and orderbook streams
+            for stream_type in &["trade", "orderbook"] {
+                for chunk_idx in 0..num_chunks {
+                    ws_streams.insert(
+                        (asset_type.clone(), stream_type.to_string(), chunk_idx),
+                        None
+                    );
+                }
             }
         }
-        
+
         Self {
             config,
             symbol_mapper,
@@ -80,10 +86,10 @@ impl Feeder for BybitExchange {
 
     async fn connect(&mut self) -> Result<()> {
         let config = self.config.clone();  // Clone config
-        
-        info!("Bybit: Creating {} WebSocket connections (5 symbols each, with both trade and orderbook streams)", self.ws_streams.len());
-        
-        for ((asset_type, chunk_idx), ws_stream) in self.ws_streams.iter_mut() {
+
+        info!("Bybit: Creating {} WebSocket connections (10 symbols each, separate for trade and orderbook)", self.ws_streams.len());
+
+        for ((asset_type, stream_type, chunk_idx), ws_stream) in self.ws_streams.iter_mut() {
             // Map to Bybit-specific asset types
             let ws_url = match asset_type.as_str() {
                 "spot" => "wss://stream.bybit.com/v5/public/spot".to_string(),
@@ -91,7 +97,7 @@ impl Feeder for BybitExchange {
                 _ => return Err(Error::InvalidInput(format!("Invalid asset type: {}", asset_type))),
             };
             // Only log at debug level
-            debug!("Connecting to Bybit {} chunk {}: {}", asset_type, chunk_idx, ws_url);
+            debug!("Connecting to Bybit {} {} chunk {}: {}", asset_type, stream_type, chunk_idx, ws_url);
             
             // Add retry logic with exponential backoff for errors
             let mut retry_count = 0;
@@ -102,28 +108,28 @@ impl Feeder for BybitExchange {
                 match connect_with_large_buffer(&ws_url).await {
                     Ok((stream, _)) => {
                         *ws_stream = Some(stream);
-                        info!("Successfully connected to Bybit {} chunk {} at {}", 
-                            asset_type, chunk_idx, ws_url);
-                        
+                        info!("Successfully connected to Bybit {} {} chunk {} at {}",
+                            asset_type, stream_type, chunk_idx, ws_url);
+
                         // Update connection stats - mark as connected
                         {
                             let mut stats = CONNECTION_STATS.write();
-                            let key = format!("Bybit_{}", asset_type);
+                            let key = format!("Bybit_{}_{}", asset_type, stream_type);
                             let entry = stats.entry(key.clone()).or_default();
                             entry.connected += 1;
                             entry.total_connections += 1;
                             info!("Bybit: [{}] Connection established for chunk {}", key, chunk_idx);
                         }
-                        
+
                         // Log successful connection to QuestDB
-                        let connection_id = format!("bybit-{}-{}", asset_type, chunk_idx);
+                        let connection_id = format!("bybit-{}-{}-{}", asset_type, stream_type, chunk_idx);
                         let _ = crate::core::feeder_metrics::log_connection(
                             "Bybit", 
                             &connection_id, 
                             ConnectionEvent::Connected
                         ).await;
-                        
-                        debug!("Connected to Bybit {} chunk {}", asset_type, chunk_idx);
+
+                        debug!("Connected to Bybit {} {} chunk {}", asset_type, stream_type, chunk_idx);
                         break;
                     }
                     Err(e) => {
@@ -132,27 +138,27 @@ impl Feeder for BybitExchange {
                         
                         // Check various error conditions
                         if error_str.contains("403") || error_str.contains("Forbidden") {
-                            warn!("Got 403 error from Bybit {} chunk {}. Retrying in {} seconds (attempt {}/{})", 
-                                asset_type, chunk_idx, retry_delay.as_secs(), retry_count, max_retries);
+                            warn!("Got 403 error from Bybit {} {} chunk {}. Retrying in {} seconds (attempt {}/{})",
+                                asset_type, stream_type, chunk_idx, retry_delay.as_secs(), retry_count, max_retries);
                             // Increase delay significantly for 403 errors
                             retry_delay = retry_delay.saturating_mul(3).min(Duration::from_secs(600));
                         } else if error_str.contains("TLS error") || error_str.contains("unexpected EOF") {
                             // TLS errors often mean rate limiting or connection limit
-                            warn!("TLS/Connection error for Bybit {} chunk {}. Likely rate limited. Retrying in {} seconds (attempt {}/{})", 
-                                asset_type, chunk_idx, retry_delay.as_secs(), retry_count, max_retries);
+                            warn!("TLS/Connection error for Bybit {} {} chunk {}. Likely rate limited. Retrying in {} seconds (attempt {}/{})",
+                                asset_type, stream_type, chunk_idx, retry_delay.as_secs(), retry_count, max_retries);
                             retry_delay = retry_delay.saturating_mul(2).min(Duration::from_secs(300));
                         } else if error_str.contains("429") || error_str.contains("Too Many") {
-                            warn!("Rate limit hit for Bybit {} chunk {}. Retrying in {} seconds (attempt {}/{})", 
-                                asset_type, chunk_idx, retry_delay.as_secs(), retry_count, max_retries);
+                            warn!("Rate limit hit for Bybit {} {} chunk {}. Retrying in {} seconds (attempt {}/{})",
+                                asset_type, stream_type, chunk_idx, retry_delay.as_secs(), retry_count, max_retries);
                             retry_delay = retry_delay.saturating_mul(3).min(Duration::from_secs(600));
                         } else {
-                            warn!("Connection error for Bybit {} chunk {}: {}. Retrying in {} seconds (attempt {}/{})", 
-                                asset_type, chunk_idx, error_str, retry_delay.as_secs(), retry_count, max_retries);
+                            warn!("Connection error for Bybit {} {} chunk {}: {}. Retrying in {} seconds (attempt {}/{})",
+                                asset_type, stream_type, chunk_idx, error_str, retry_delay.as_secs(), retry_count, max_retries);
                         }
-                        
+
                         if retry_count > max_retries {
-                            warn!("Failed to connect to Bybit {} chunk {} after {} retries. Skipping this connection.", 
-                                asset_type, chunk_idx, max_retries);
+                            warn!("Failed to connect to Bybit {} {} chunk {} after {} retries. Skipping this connection.",
+                                asset_type, stream_type, chunk_idx, max_retries);
                             // Skip this connection instead of failing entirely
                             *ws_stream = None;
                             break;
@@ -172,10 +178,10 @@ impl Feeder for BybitExchange {
     }
 
     async fn subscribe(&mut self) -> Result<()> {
-        const SYMBOLS_PER_CONNECTION: usize = 5;
+        const SYMBOLS_PER_CONNECTION: usize = 10;
         let config = self.config.clone();  // Clone config
-        
-        for ((asset_type, chunk_idx), ws_stream) in self.ws_streams.iter_mut() {
+
+        for ((asset_type, stream_type, chunk_idx), ws_stream) in self.ws_streams.iter_mut() {
             if let Some(ws_stream) = ws_stream {
                 // Get symbols based on asset type
                 let symbols = if asset_type == "spot" {
@@ -184,22 +190,27 @@ impl Feeder for BybitExchange {
                     &config.subscribe_data.futures_symbols
                 };
 
-                // Get the symbols for this chunk (5 symbols per connection)
+                // Get the symbols for this chunk (10 symbols per connection)
                 let start_idx = *chunk_idx * SYMBOLS_PER_CONNECTION;
                 let end_idx = std::cmp::min(start_idx + SYMBOLS_PER_CONNECTION, symbols.len());
                 let chunk_symbols = &symbols[start_idx..end_idx];
-                
-                // Create subscription topics for BOTH trade and orderbook for each symbol
+
+                // Create subscription topics for ONLY this stream type
                 let mut topics = Vec::new();
                 for code in chunk_symbols {
                     let formatted_symbol = code.clone();
 
-                    // Add both trade and orderbook topics for each symbol
-                    topics.push(format!("publicTrade.{}", formatted_symbol));
-                    topics.push(format!("orderbook.{}.{}", 
-                        config.subscribe_data.order_depth,
-                        formatted_symbol
-                    ));
+                    // Add ONLY the topic for this stream type
+                    if stream_type == "trade" {
+                        topics.push(format!("publicTrade.{}", formatted_symbol));
+                    } else if stream_type == "orderbook" {
+                        if config.subscribe_data.order_depth > 0 {
+                            topics.push(format!("orderbook.{}.{}",
+                                config.subscribe_data.order_depth,
+                                formatted_symbol
+                            ));
+                        }
+                    }
                 }
 
                 let subscribe_msg = json!({
@@ -208,15 +219,13 @@ impl Feeder for BybitExchange {
                 });
 
                 let subscription = subscribe_msg.to_string();
-                debug!("Sending subscription to Bybit {} chunk {} with {} symbols ({} topics total)", 
-                    asset_type, chunk_idx, chunk_symbols.len(), topics.len());
-                
+                debug!("Sending {} subscription to Bybit {} chunk {} with {} symbols ({} topics total)",
+                    stream_type, asset_type, chunk_idx, chunk_symbols.len(), topics.len());
+
                 let message = Message::Text(subscription.into());
                 ws_stream.send(message).await?;
-                debug!("Bybit: Sent subscription to {} chunk {} with {} symbols",
-                    asset_type, chunk_idx, chunk_symbols.len());
-                debug!("  Subscribed symbols: {:?}", chunk_symbols);
-                debug!("Subscribed to Bybit {} chunk {}", asset_type, chunk_idx);
+                info!("Sent {} subscription to Bybit {} chunk {} with symbols: {:?}",
+                    stream_type, asset_type, chunk_idx, chunk_symbols);
             }
         }
         Ok(())
@@ -226,20 +235,21 @@ impl Feeder for BybitExchange {
         // Reset connection counter
         self.active_connections.store(0, Ordering::SeqCst);
 
-        for ((asset_type, chunk_idx), ws_stream_opt) in self.ws_streams.iter_mut() {
+        for ((asset_type, stream_type, chunk_idx), ws_stream_opt) in self.ws_streams.iter_mut() {
             if let Some(mut ws_stream) = ws_stream_opt.take() {
                 let asset_type = asset_type.clone();
+                let stream_type = stream_type.clone();
                 let chunk_idx = *chunk_idx;
                 let symbol_mapper = self.symbol_mapper.clone();
                 let active_connections = self.active_connections.clone();
                 let config = self.config.clone();
-                
+
                 // Increment active connection count
                 active_connections.fetch_add(1, Ordering::SeqCst);
 
                 tokio::spawn(async move {
-                    info!("Bybit: Starting {} chunk {} stream processing (trade + orderbook)",
-                        asset_type, chunk_idx);
+                    info!("Bybit: Starting {} {} chunk {} stream processing",
+                        asset_type, stream_type, chunk_idx);
                     
                     // Get shutdown receiver
                     let mut shutdown_rx = get_shutdown_receiver();
@@ -257,34 +267,34 @@ impl Feeder for BybitExchange {
                         tokio::select! {
                             _ = shutdown_rx.changed() => {
                                 if *shutdown_rx.borrow() {
-                                    info!("Bybit {} chunk {} received shutdown signal", asset_type, chunk_idx);
+                                    info!("Bybit {} {} chunk {} received shutdown signal", asset_type, stream_type, chunk_idx);
                                     break;
                                 }
                             }
                             _ = ping_interval.tick() => {
                                 // Send ping to keep connection alive
                                 if let Err(e) = ws_stream.send(Message::Ping(vec![].into())).await {
-                                    warn!("Failed to send ping to Bybit {} chunk {}: {}", 
-                                        asset_type, chunk_idx, e);
-                                    
+                                    warn!("Failed to send ping to Bybit {} {} chunk {}: {}",
+                                        asset_type, stream_type, chunk_idx, e);
+
                                     // Connection tracking is handled in feeder.rs
                                     // Log disconnection/error to file
-                                    error!("[Bybit_{}] WebSocket ping failed for chunk {}", asset_type, chunk_idx);
+                                    error!("[Bybit_{}_{}] WebSocket ping failed for chunk {}", asset_type, stream_type, chunk_idx);
                                     break;
                                 }
-                                debug!("Sent ping to Bybit {} chunk {}", 
-                                    asset_type, chunk_idx);
+                                debug!("Sent ping to Bybit {} {} chunk {}",
+                                    asset_type, stream_type, chunk_idx);
                             }
                             _ = health_check_interval.tick() => {
                                 // Check if we haven't received any messages for too long
                                 if last_message_time.elapsed() > Duration::from_secs(300) { // 5 minutes
-                                    warn!("No messages received from Bybit {} chunk {} for {} seconds, connection may be stale", 
-                                        asset_type, chunk_idx, last_message_time.elapsed().as_secs());
-                                    
+                                    warn!("No messages received from Bybit {} {} chunk {} for {} seconds, connection may be stale",
+                                        asset_type, stream_type, chunk_idx, last_message_time.elapsed().as_secs());
+
                                     // Send a test ping to check connection health
                                     if let Err(e) = ws_stream.send(Message::Ping(b"health_check".to_vec().into())).await {
-                                        error!("Health check ping failed for Bybit {} chunk {}: {}", 
-                                            asset_type, chunk_idx, e);
+                                        error!("Health check ping failed for Bybit {} {} chunk {}: {}",
+                                            asset_type, stream_type, chunk_idx, e);
                                         break;
                                     }
                                 }
@@ -297,28 +307,28 @@ impl Feeder for BybitExchange {
                                     },
                                     Some(Ok(Message::Pong(_))) => {
                                         last_message_time = std::time::Instant::now(); // Update last message time
-                                        debug!("Received pong from Bybit {} chunk {}", 
-                                            asset_type, chunk_idx);
+                                        debug!("Received pong from Bybit {} {} chunk {}",
+                                            asset_type, stream_type, chunk_idx);
                                     },
                                     Some(Ok(Message::Ping(data))) => {
                                         last_message_time = std::time::Instant::now(); // Update last message time
                                         // Respond to server ping with pong
                                         if let Err(e) = ws_stream.send(Message::Pong(data)).await {
-                                            warn!("Failed to send pong to Bybit {} chunk {}: {}", 
-                                                asset_type, chunk_idx, e);
+                                            warn!("Failed to send pong to Bybit {} {} chunk {}: {}",
+                                                asset_type, stream_type, chunk_idx, e);
                                             break;
                                         }
-                                        debug!("Sent pong response to Bybit {} chunk {}", 
-                                            asset_type, chunk_idx);
+                                        debug!("Sent pong response to Bybit {} {} chunk {}",
+                                            asset_type, stream_type, chunk_idx);
                                     },
                                     Some(Ok(Message::Close(frame))) => {
-                                        warn!("Bybit WebSocket closed for {} chunk {}: {:?}", 
-                                            asset_type, chunk_idx, frame);
-                                        
+                                        warn!("Bybit WebSocket closed for {} {} chunk {}: {:?}",
+                                            asset_type, stream_type, chunk_idx, frame);
+
                                         // Update connection stats - mark as disconnected
                                         {
                                             let mut stats = CONNECTION_STATS.write();
-                                            let key = format!("Bybit_{}", asset_type);
+                                            let key = format!("Bybit_{}_{}", asset_type, stream_type);
                                             let entry = stats.entry(key.clone()).or_default();
                                             if entry.connected > 0 {
                                                 entry.connected -= 1;
@@ -334,13 +344,13 @@ impl Feeder for BybitExchange {
                                     },
                                     Some(Err(e)) => {
                                         // Don't print to stderr in silent mode, use warn! instead
-                                        warn!("Bybit WebSocket error for {} chunk {}: {}", 
-                                            asset_type, chunk_idx, e);
-                                        
+                                        warn!("Bybit WebSocket error for {} {} chunk {}: {}",
+                                            asset_type, stream_type, chunk_idx, e);
+
                                         // Update connection stats - mark as disconnected
                                         {
                                             let mut stats = CONNECTION_STATS.write();
-                                            let key = format!("Bybit_{}", asset_type);
+                                            let key = format!("Bybit_{}_{}", asset_type, stream_type);
                                             let entry = stats.entry(key.clone()).or_default();
                                             if entry.connected > 0 {
                                                 entry.connected -= 1;
@@ -352,13 +362,13 @@ impl Feeder for BybitExchange {
                                         break;
                                     },
                                     None => {
-                                        warn!("WebSocket stream ended for Bybit {} chunk {}", 
-                                            asset_type, chunk_idx);
-                                        
+                                        warn!("WebSocket stream ended for Bybit {} {} chunk {}",
+                                            asset_type, stream_type, chunk_idx);
+
                                         // Update connection stats - mark as disconnected
                                         {
                                             let mut stats = CONNECTION_STATS.write();
-                                            let key = format!("Bybit_{}", asset_type);
+                                            let key = format!("Bybit_{}_{}", asset_type, stream_type);
                                             let entry = stats.entry(key.clone()).or_default();
                                             if entry.connected > 0 {
                                                 entry.connected -= 1;
@@ -373,9 +383,9 @@ impl Feeder for BybitExchange {
                             }
                         }
                     }
-                    warn!("WebSocket connection lost for Bybit {} chunk {}, will be retried by feeder", 
-                        asset_type, chunk_idx);
-                    
+                    warn!("WebSocket connection lost for Bybit {} {} chunk {}, will be retried by feeder",
+                        asset_type, stream_type, chunk_idx);
+
                     // Decrement active connection count
                     active_connections.fetch_sub(1, Ordering::SeqCst);
                 });

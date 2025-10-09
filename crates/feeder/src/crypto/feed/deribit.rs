@@ -18,26 +18,32 @@ use crate::load_config::ExchangeConfig;
 pub struct DeribitExchange {
     config: ExchangeConfig,
     symbol_mapper: Arc<SymbolMapper>,
-    ws_streams: HashMap<(String, usize), Option<WebSocketStream<MaybeTlsStream<tokio::net::TcpStream>>>>,
+    ws_streams: HashMap<(String, String, usize), Option<WebSocketStream<MaybeTlsStream<tokio::net::TcpStream>>>>,
     active_connections: Arc<AtomicUsize>,
     orderbooks: Arc<parking_lot::RwLock<HashMap<String, OrderBookData>>>,
 }
 
 impl DeribitExchange {
     pub fn new(config: ExchangeConfig, symbol_mapper: Arc<SymbolMapper>) -> Self {
-        const SYMBOLS_PER_CONNECTION: usize = 5;
+        const SYMBOLS_PER_CONNECTION: usize = 10;
         let mut ws_streams = HashMap::new();
 
         // Combine futures and option symbols
         let total_symbols = config.subscribe_data.futures_symbols.len() + config.subscribe_data.option_symbols.len();
         let num_chunks = (total_symbols + SYMBOLS_PER_CONNECTION - 1) / SYMBOLS_PER_CONNECTION;
 
+        debug!("Deribit constructor - {} symbols, {} per connection = {} connections per stream type",
+            total_symbols, SYMBOLS_PER_CONNECTION, num_chunks);
+
+        // Initialize separate connections for trade and orderbook streams
         for asset_type in &config.feed_config.asset_type {
-            for chunk_idx in 0..num_chunks {
-                ws_streams.insert(
-                    (asset_type.clone(), chunk_idx),
-                    None
-                );
+            for stream_type in &["trade", "orderbook"] {
+                for chunk_idx in 0..num_chunks {
+                    ws_streams.insert(
+                        (asset_type.clone(), stream_type.to_string(), chunk_idx),
+                        None
+                    );
+                }
             }
         }
 
@@ -59,12 +65,12 @@ impl Feeder for DeribitExchange {
 
     async fn connect(&mut self) -> Result<()> {
         let config = self.config.clone();
-        
-        info!("Deribit: Creating {} WebSocket connections (5 symbols each, with both trade and orderbook streams)", self.ws_streams.len());
-        
-        for ((asset_type, chunk_idx), ws_stream) in self.ws_streams.iter_mut() {
+
+        info!("Deribit: Creating {} WebSocket connections (10 symbols each, separate for trade and orderbook)", self.ws_streams.len());
+
+        for ((asset_type, stream_type, chunk_idx), ws_stream) in self.ws_streams.iter_mut() {
             let ws_url = "wss://www.deribit.com/ws/api/v2";
-            debug!("Connecting to Deribit {} chunk {}: {}", asset_type, chunk_idx, ws_url);
+            debug!("Connecting to Deribit {} {} chunk {}: {}", asset_type, stream_type, chunk_idx, ws_url);
             
             let mut retry_count = 0;
             let max_retries = 5;
@@ -74,32 +80,32 @@ impl Feeder for DeribitExchange {
                 match connect_with_large_buffer(ws_url).await {
                     Ok((stream, _)) => {
                         *ws_stream = Some(stream);
-                        info!("Successfully connected to Deribit {} chunk {} at {}", 
-                            asset_type, chunk_idx, ws_url);
-                        
+                        info!("Successfully connected to Deribit {} {} chunk {} at {}",
+                            asset_type, stream_type, chunk_idx, ws_url);
+
                         // Update connection stats - mark as connected
                         {
                             let mut stats = CONNECTION_STATS.write();
-                            let key = format!("Deribit_{}", asset_type);
+                            let key = format!("Deribit_{}_{}", asset_type, stream_type);
                             let entry = stats.entry(key.clone()).or_default();
                             entry.connected += 1;
                             entry.total_connections += 1;
                             info!("[{}] Connection established for chunk {}", key, chunk_idx);
                         }
-                        
-                        debug!("Connected to Deribit {} chunk {}", asset_type, chunk_idx);
+
+                        debug!("Connected to Deribit {} {} chunk {}", asset_type, stream_type, chunk_idx);
                         break;
                     }
                     Err(e) => {
                         let error_str = e.to_string();
                         retry_count += 1;
-                        
-                        warn!("Connection error for Deribit {} chunk {}: {}. Retrying in {} seconds (attempt {}/{})", 
-                            asset_type, chunk_idx, error_str, retry_delay.as_secs(), retry_count, max_retries);
-                        
+
+                        warn!("Connection error for Deribit {} {} chunk {}: {}. Retrying in {} seconds (attempt {}/{})",
+                            asset_type, stream_type, chunk_idx, error_str, retry_delay.as_secs(), retry_count, max_retries);
+
                         if retry_count > max_retries {
-                            warn!("Failed to connect to Deribit {} chunk {} after {} retries. Skipping this connection.", 
-                                asset_type, chunk_idx, max_retries);
+                            warn!("Failed to connect to Deribit {} {} chunk {} after {} retries. Skipping this connection.",
+                                asset_type, stream_type, chunk_idx, max_retries);
                             *ws_stream = None;
                             break;
                         }
@@ -116,10 +122,10 @@ impl Feeder for DeribitExchange {
     }
 
     async fn subscribe(&mut self) -> Result<()> {
-        const SYMBOLS_PER_CONNECTION: usize = 5;
+        const SYMBOLS_PER_CONNECTION: usize = 10;
         let config = self.config.clone();
 
-        for ((asset_type, chunk_idx), ws_stream) in self.ws_streams.iter_mut() {
+        for ((asset_type, stream_type, chunk_idx), ws_stream) in self.ws_streams.iter_mut() {
             if let Some(ws_stream) = ws_stream {
                 // Combine futures and option symbols
                 let mut all_symbols = config.subscribe_data.futures_symbols.clone();
@@ -129,18 +135,22 @@ impl Feeder for DeribitExchange {
                 let end_idx = std::cmp::min(start_idx + SYMBOLS_PER_CONNECTION, all_symbols.len());
                 let chunk_symbols = &all_symbols[start_idx..end_idx];
 
+                // Subscribe to ONLY the channels for this stream type
                 let mut channels = Vec::new();
                 for symbol in chunk_symbols {
-                    // Subscribe to ticker, trades and orderbook for each instrument
-                    channels.push(format!("ticker.{}.100ms", symbol));
-                    channels.push(format!("trades.{}.100ms", symbol));
-                    channels.push(format!("book.{}.100ms", symbol));
+                    // Subscribe ONLY to channels for this stream type
+                    if stream_type == "trade" {
+                        channels.push(format!("ticker.{}.100ms", symbol));
+                        channels.push(format!("trades.{}.100ms", symbol));
+                    } else if stream_type == "orderbook" {
+                        channels.push(format!("book.{}.100ms", symbol));
+                    }
                 }
 
-                // Use unique ID for each subscription message (based on chunk_idx)
+                // Use unique ID for each subscription message (based on hash of asset_type + stream_type + chunk_idx)
                 let subscribe_msg = json!({
                     "jsonrpc": "2.0",
-                    "id": 8066 + chunk_idx,
+                    "id": 8066 + chunk_idx * 100 + if stream_type == "trade" { 0 } else { 50 },
                     "method": "public/subscribe",
                     "params": {
                         "channels": channels
@@ -148,14 +158,13 @@ impl Feeder for DeribitExchange {
                 });
 
                 let subscription = subscribe_msg.to_string();
-                info!("[DERIBIT SUBSCRIBE] Sending subscription to {} chunk {} with {} symbols. Full message: {}",
-                    asset_type, chunk_idx, chunk_symbols.len(), subscription);
+                info!("[DERIBIT SUBSCRIBE] Sending {} subscription to {} chunk {} with {} symbols. Full message: {}",
+                    stream_type, asset_type, chunk_idx, chunk_symbols.len(), subscription);
 
                 let message = Message::Text(subscription.into());
                 ws_stream.send(message).await?;
-                info!("[DERIBIT SUBSCRIBE] Sent subscription to {} chunk {} with channels: {:?}", 
-                    asset_type, chunk_idx, channels);
-                debug!("Subscribed to Deribit {} chunk {}", asset_type, chunk_idx);
+                info!("[DERIBIT SUBSCRIBE] Sent {} subscription to {} chunk {} with channels: {:?}",
+                    stream_type, asset_type, chunk_idx, channels);
             }
         }
         Ok(())
@@ -164,9 +173,10 @@ impl Feeder for DeribitExchange {
         async fn start(&mut self) -> Result<()> {
         self.active_connections.store(0, Ordering::SeqCst);
 
-        for ((asset_type, chunk_idx), ws_stream_opt) in self.ws_streams.iter_mut() {
+        for ((asset_type, stream_type, chunk_idx), ws_stream_opt) in self.ws_streams.iter_mut() {
             if let Some(mut ws_stream) = ws_stream_opt.take() {
                 let asset_type = asset_type.clone();
+                let stream_type = stream_type.clone();
                 let chunk_idx = *chunk_idx;
                 let symbol_mapper = self.symbol_mapper.clone();
                 let active_connections = self.active_connections.clone();
@@ -176,8 +186,8 @@ impl Feeder for DeribitExchange {
                 active_connections.fetch_add(1, Ordering::SeqCst);
 
                 tokio::spawn(async move {
-                    debug!("Starting Deribit {} chunk {} stream processing (trade + orderbook)", 
-                        asset_type, chunk_idx);
+                    debug!("Starting Deribit {} {} chunk {} stream processing",
+                        asset_type, stream_type, chunk_idx);
                     
                     let mut shutdown_rx = get_shutdown_receiver();
                     
@@ -190,28 +200,28 @@ impl Feeder for DeribitExchange {
                         tokio::select! {
                             _ = shutdown_rx.changed() => {
                                 if *shutdown_rx.borrow() {
-                                    info!("Deribit {} chunk {} received shutdown signal", asset_type, chunk_idx);
+                                    info!("Deribit {} {} chunk {} received shutdown signal", asset_type, stream_type, chunk_idx);
                                     break;
                                 }
                             }
                             _ = ping_interval.tick() => {
                                 if let Err(e) = ws_stream.send(Message::Ping(vec![].into())).await {
-                                    warn!("Failed to send ping to Deribit {} chunk {}: {}", 
-                                        asset_type, chunk_idx, e);
-                                    error!("[Deribit_{}] WebSocket ping failed for chunk {}", asset_type, chunk_idx);
+                                    warn!("Failed to send ping to Deribit {} {} chunk {}: {}",
+                                        asset_type, stream_type, chunk_idx, e);
+                                    error!("[Deribit_{}_{}] WebSocket ping failed for chunk {}", asset_type, stream_type, chunk_idx);
                                     break;
                                 }
-                                debug!("Sent ping to Deribit {} chunk {}", 
-                                    asset_type, chunk_idx);
+                                debug!("Sent ping to Deribit {} {} chunk {}",
+                                    asset_type, stream_type, chunk_idx);
                             }
                             _ = health_check_interval.tick() => {
                                 if last_message_time.elapsed() > Duration::from_secs(300) { // 5 minutes
-                                    warn!("No messages received from Deribit {} chunk {} for {} seconds, connection may be stale", 
-                                        asset_type, chunk_idx, last_message_time.elapsed().as_secs());
-                                    
+                                    warn!("No messages received from Deribit {} {} chunk {} for {} seconds, connection may be stale",
+                                        asset_type, stream_type, chunk_idx, last_message_time.elapsed().as_secs());
+
                                     if let Err(e) = ws_stream.send(Message::Ping(b"health_check".to_vec().into())).await {
-                                        error!("Health check ping failed for Deribit {} chunk {}: {}", 
-                                            asset_type, chunk_idx, e);
+                                        error!("Health check ping failed for Deribit {} {} chunk {}: {}",
+                                            asset_type, stream_type, chunk_idx, e);
                                         break;
                                     }
                                 }
@@ -224,25 +234,25 @@ impl Feeder for DeribitExchange {
                                     },
                                     Some(Ok(Message::Pong(_))) => {
                                         last_message_time = std::time::Instant::now();
-                                        debug!("Received pong from Deribit {} chunk {}", 
-                                            asset_type, chunk_idx);
+                                        debug!("Received pong from Deribit {} {} chunk {}",
+                                            asset_type, stream_type, chunk_idx);
                                     },
                                     Some(Ok(Message::Ping(data))) => {
                                         last_message_time = std::time::Instant::now();
                                         if let Err(e) = ws_stream.send(Message::Pong(data)).await {
-                                            warn!("Failed to send pong to Deribit {} chunk {}: {}", 
-                                                asset_type, chunk_idx, e);
+                                            warn!("Failed to send pong to Deribit {} {} chunk {}: {}",
+                                                asset_type, stream_type, chunk_idx, e);
                                             break;
                                         }
-                                        debug!("Sent pong response to Deribit {} chunk {}", 
-                                            asset_type, chunk_idx);
+                                        debug!("Sent pong response to Deribit {} {} chunk {}",
+                                            asset_type, stream_type, chunk_idx);
                                     },
                                     Some(Ok(Message::Close(frame))) => {
-                                        warn!("Deribit WebSocket closed for {} chunk {}: {:?}", 
-                                            asset_type, chunk_idx, frame);
+                                        warn!("Deribit WebSocket closed for {} {} chunk {}: {:?}",
+                                            asset_type, stream_type, chunk_idx, frame);
                                         {
                                             let mut stats = CONNECTION_STATS.write();
-                                            let key = format!("Deribit_{}", asset_type);
+                                            let key = format!("Deribit_{}_{}", asset_type, stream_type);
                                             let entry = stats.entry(key.clone()).or_default();
                                             if entry.connected > 0 {
                                                 entry.connected -= 1;
@@ -256,11 +266,11 @@ impl Feeder for DeribitExchange {
                                         debug!("Received other message type from Deribit: {:?}", msg);
                                     },
                                     Some(Err(e)) => {
-                                        warn!("Deribit WebSocket error for {} chunk {}: {}", 
-                                            asset_type, chunk_idx, e);
+                                        warn!("Deribit WebSocket error for {} {} chunk {}: {}",
+                                            asset_type, stream_type, chunk_idx, e);
                                         {
                                             let mut stats = CONNECTION_STATS.write();
-                                            let key = format!("Deribit_{}", asset_type);
+                                            let key = format!("Deribit_{}_{}", asset_type, stream_type);
                                             let entry = stats.entry(key.clone()).or_default();
                                             if entry.connected > 0 {
                                                 entry.connected -= 1;
@@ -271,11 +281,11 @@ impl Feeder for DeribitExchange {
                                         break;
                                     },
                                     None => {
-                                        warn!("WebSocket stream ended for Deribit {} chunk {}", 
-                                            asset_type, chunk_idx);
+                                        warn!("WebSocket stream ended for Deribit {} {} chunk {}",
+                                            asset_type, stream_type, chunk_idx);
                                         {
                                             let mut stats = CONNECTION_STATS.write();
-                                            let key = format!("Deribit_{}", asset_type);
+                                            let key = format!("Deribit_{}_{}", asset_type, stream_type);
                                             let entry = stats.entry(key.clone()).or_default();
                                             if entry.connected > 0 {
                                                 entry.connected -= 1;
@@ -289,9 +299,9 @@ impl Feeder for DeribitExchange {
                             }
                         }
                     }
-                    warn!("WebSocket connection lost for Deribit {} chunk {}, will be retried by feeder", 
-                        asset_type, chunk_idx);
-                    
+                    warn!("WebSocket connection lost for Deribit {} {} chunk {}, will be retried by feeder",
+                        asset_type, stream_type, chunk_idx);
+
                     active_connections.fetch_sub(1, Ordering::SeqCst);
                 });
             }

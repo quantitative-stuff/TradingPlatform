@@ -21,11 +21,11 @@ const USE_MULTI_PORT_UDP: bool = true;
 pub struct OkxExchange {
     config: ExchangeConfig,
     symbol_mapper: Arc<SymbolMapper>,
-    // Map of (asset_type, chunk_index) -> WebSocket connection
-    // Each connection handles up to 5 symbols with both trade and orderbook streams
-    ws_streams: HashMap<(String, usize), Option<WebSocketStream<MaybeTlsStream<tokio::net::TcpStream>>>>,
+    // Map of (asset_type, stream_type, chunk_index) -> WebSocket connection
+    // Each connection handles up to 10 symbols for either trade OR orderbook
+    ws_streams: HashMap<(String, String, usize), Option<WebSocketStream<MaybeTlsStream<tokio::net::TcpStream>>>>,
     // Store subscription messages for reconnection
-    subscription_messages: HashMap<(String, usize), String>,
+    subscription_messages: HashMap<(String, String, usize), String>,
     // Track active connections for proper reconnection
     active_connections: Arc<AtomicUsize>,
 }
@@ -35,12 +35,10 @@ impl OkxExchange {
         config: ExchangeConfig,
         symbol_mapper: Arc<SymbolMapper>,
     ) -> Self {
-        let limits = ExchangeConnectionLimits::for_exchange("okx");
-        let symbols_per_connection = limits.max_symbols_per_connection;
+        const SYMBOLS_PER_CONNECTION: usize = 10;
         let mut ws_streams = HashMap::new();
 
-        // Calculate how many connections we need for each asset type
-        // Initialize connections for each asset type separately
+        // Initialize separate connections for trade and orderbook streams
         for asset_type in &config.feed_config.asset_type {
             let symbols = if asset_type == "spot" {
                 &config.subscribe_data.spot_symbols
@@ -49,14 +47,19 @@ impl OkxExchange {
             };
 
             let num_symbols = symbols.len();
-            let num_chunks = (num_symbols + symbols_per_connection - 1) / symbols_per_connection;
+            let num_chunks = (num_symbols + SYMBOLS_PER_CONNECTION - 1) / SYMBOLS_PER_CONNECTION;
 
-            // Create connection entries for each chunk
-            for chunk_idx in 0..num_chunks {
-                ws_streams.insert(
-                    (asset_type.clone(), chunk_idx),
-                    None
-                );
+            debug!("OKX constructor - {} {} symbols, {} per connection = {} connections per stream type",
+                asset_type, num_symbols, SYMBOLS_PER_CONNECTION, num_chunks);
+
+            // Initialize separate connections for trade and orderbook streams
+            for stream_type in &["trade", "orderbook"] {
+                for chunk_idx in 0..num_chunks {
+                    ws_streams.insert(
+                        (asset_type.clone(), stream_type.to_string(), chunk_idx),
+                        None
+                    );
+                }
             }
         }
 
@@ -69,9 +72,8 @@ impl OkxExchange {
         }
     }
 
-    async fn connect_websocket(&mut self, asset_type: &str, chunk_idx: usize) -> Result<()> {
-        let limits = ExchangeConnectionLimits::for_exchange("okx");
-        let symbols_per_connection = limits.max_symbols_per_connection;
+    async fn connect_websocket(&mut self, asset_type: &str, stream_type: &str, chunk_idx: usize) -> Result<()> {
+        const SYMBOLS_PER_CONNECTION: usize = 10;
 
         // Get symbols based on asset type
         let symbols = if asset_type == "spot" {
@@ -80,26 +82,26 @@ impl OkxExchange {
             &self.config.subscribe_data.futures_symbols
         };
 
-        // Get the symbols for this chunk (5 symbols per connection)
-        let start_idx = chunk_idx * symbols_per_connection;
-        let end_idx = std::cmp::min(start_idx + symbols_per_connection, symbols.len());
+        // Get the symbols for this chunk (10 symbols per connection)
+        let start_idx = chunk_idx * SYMBOLS_PER_CONNECTION;
+        let end_idx = std::cmp::min(start_idx + SYMBOLS_PER_CONNECTION, symbols.len());
         let chunk_symbols = &symbols[start_idx..end_idx];
 
         // OKX uses a single WebSocket URL for all connections
         let ws_url = "wss://ws.okx.com:8443/ws/v5/public";
 
-        info!("OKX: Connecting to {} chunk {} with {} symbols", asset_type, chunk_idx, chunk_symbols.len());
+        info!("OKX: Connecting to {} {} chunk {} with {} symbols", asset_type, stream_type, chunk_idx, chunk_symbols.len());
         debug!("  Symbols: {:?}", chunk_symbols);
 
         match connect_with_large_buffer(ws_url).await {
             Ok((ws_stream, response)) => {
-                debug!("OKX WebSocket connected for {} chunk {}", asset_type, chunk_idx);
+                debug!("OKX WebSocket connected for {} {} chunk {}", asset_type, stream_type, chunk_idx);
                 debug!("OKX Connection response: {:?}", response);
 
                 // Update connection stats - mark as connected
                 {
                     let mut stats = CONNECTION_STATS.write();
-                    let key = format!("OKX_{}", asset_type);
+                    let key = format!("OKX_{}_{}", asset_type, stream_type);
                     let entry = stats.entry(key.clone()).or_default();
                     entry.connected += 1;
                     entry.total_connections += 1;
@@ -107,21 +109,21 @@ impl OkxExchange {
                 }
 
                 // Log successful connection to QuestDB
-                let connection_id = format!("okx-{}-{}", asset_type, chunk_idx);
+                let connection_id = format!("okx-{}-{}-{}", asset_type, stream_type, chunk_idx);
                 let _ = crate::core::feeder_metrics::log_connection(
                     "OKX",
                     &connection_id,
                     ConnectionEvent::Connected
                 ).await;
 
-                if let Some(stream_slot) = self.ws_streams.get_mut(&(asset_type.to_string(), chunk_idx)) {
+                if let Some(stream_slot) = self.ws_streams.get_mut(&(asset_type.to_string(), stream_type.to_string(), chunk_idx)) {
                     *stream_slot = Some(ws_stream);
                 }
                 Ok(())
             }
             Err(e) => {
-                error!("Failed to connect to OKX WebSocket for {} chunk {}: {}",
-                    asset_type, chunk_idx, e);
+                error!("Failed to connect to OKX WebSocket for {} {} chunk {}: {}",
+                    asset_type, stream_type, chunk_idx, e);
                 Err(Error::Connection(format!("OKX connection failed: {}", e)))
             }
         }
@@ -136,25 +138,25 @@ impl Feeder for OkxExchange {
 
     async fn connect(&mut self) -> Result<()> {
         let mut retry_delay = Duration::from_secs(self.config.connect_config.initial_retry_delay_secs);
-        let connection_keys: Vec<(String, usize)> = self.ws_streams
+        let connection_keys: Vec<(String, String, usize)> = self.ws_streams
             .keys()
-            .map(|(asset, chunk)| (asset.clone(), *chunk))
+            .map(|(asset, stream, chunk)| (asset.clone(), stream.clone(), *chunk))
             .collect();
 
-        info!("OKX: Creating {} WebSocket connections (5 symbols each, with both trade and orderbook streams)", connection_keys.len());
+        info!("OKX: Creating {} WebSocket connections (10 symbols each, separate for trade and orderbook)", connection_keys.len());
 
-        for (asset_type, chunk_idx) in connection_keys {
+        for (asset_type, stream_type, chunk_idx) in connection_keys {
             loop {
-                match self.connect_websocket(&asset_type, chunk_idx).await {
+                match self.connect_websocket(&asset_type, &stream_type, chunk_idx).await {
                     Ok(()) => {
-                        debug!("Successfully connected to OKX {} chunk {}",
-                            asset_type, chunk_idx);
+                        debug!("Successfully connected to OKX {} {} chunk {}",
+                            asset_type, stream_type, chunk_idx);
                         retry_delay = Duration::from_secs(self.config.connect_config.initial_retry_delay_secs);  // Reset delay on success
                         break;  // Move to next connection
                     },
                     Err(e) => {
-                        error!("Failed to connect to OKX {} chunk {}: {}",
-                            asset_type, chunk_idx, e);
+                        error!("Failed to connect to OKX {} {} chunk {}: {}",
+                            asset_type, stream_type, chunk_idx, e);
                         debug!("Retrying in {} seconds...", retry_delay.as_secs());
                         tokio::time::sleep(retry_delay).await;
                         retry_delay = retry_delay.saturating_mul(2).min(Duration::from_secs(self.config.connect_config.max_retry_delay_secs));
@@ -169,10 +171,9 @@ impl Feeder for OkxExchange {
     }
 
     async fn subscribe(&mut self) -> Result<()> {
-        let limits = ExchangeConnectionLimits::for_exchange("okx");
-        let symbols_per_connection = limits.max_symbols_per_connection;
+        const SYMBOLS_PER_CONNECTION: usize = 10;
 
-        for ((asset_type, chunk_idx), ws_stream) in self.ws_streams.iter_mut() {
+        for ((asset_type, stream_type, chunk_idx), ws_stream) in self.ws_streams.iter_mut() {
             if let Some(ws_stream) = ws_stream {
                 // Get the symbols for this chunk
                 // Get symbols based on asset type
@@ -182,25 +183,26 @@ impl Feeder for OkxExchange {
                     &self.config.subscribe_data.futures_symbols
                 };
 
-                let start_idx = *chunk_idx * symbols_per_connection;
-                let end_idx = std::cmp::min(start_idx + symbols_per_connection, symbols.len());
+                let start_idx = *chunk_idx * SYMBOLS_PER_CONNECTION;
+                let end_idx = std::cmp::min(start_idx + SYMBOLS_PER_CONNECTION, symbols.len());
                 let chunk_symbols = &symbols[start_idx..end_idx];
 
-                // Build subscription arguments for OKX
+                // Build subscription arguments for OKX - ONLY for this stream type
                 let mut args = Vec::new();
                 for symbol in chunk_symbols {
-                    // Add trade channel subscription
-                    args.push(json!({
-                        "channel": "trades",
-                        "instId": symbol
-                    }));
-
-                    // Add orderbook channel subscription
-                    // OKX supports: books (400 levels), books5 (5 levels), books-l2-tbt (full depth tick-by-tick), books50-l2-tbt (50 levels)
-                    args.push(json!({
-                        "channel": "books5",
-                        "instId": symbol
-                    }));
+                    // Add ONLY the channel for this stream type
+                    if stream_type == "trade" {
+                        args.push(json!({
+                            "channel": "trades",
+                            "instId": symbol
+                        }));
+                    } else if stream_type == "orderbook" {
+                        // OKX supports: books (400 levels), books5 (5 levels), books-l2-tbt (full depth tick-by-tick), books50-l2-tbt (50 levels)
+                        args.push(json!({
+                            "channel": "books5",
+                            "instId": symbol
+                        }));
+                    }
                 }
 
                 // Create subscription message in OKX format
@@ -211,21 +213,20 @@ impl Feeder for OkxExchange {
                 });
 
                 let subscription = subscribe_msg.to_string();
-                debug!("Sending subscription to OKX {} chunk {} with {} symbols",
-                    asset_type, chunk_idx, chunk_symbols.len());
+                debug!("Sending {} subscription to OKX {} chunk {} with {} symbols",
+                    stream_type, asset_type, chunk_idx, chunk_symbols.len());
                 debug!("  Subscription message: {}", subscription);
 
                 // Store subscription for potential reconnection
                 self.subscription_messages.insert(
-                    (asset_type.clone(), *chunk_idx),
+                    (asset_type.clone(), stream_type.clone(), *chunk_idx),
                     subscription.clone()
                 );
 
                 let message = Message::Text(subscription.into());
                 ws_stream.send(message).await?;
-                info!("OKX: Sent subscription to {} chunk {} with {} symbols",
-                    asset_type, chunk_idx, chunk_symbols.len());
-                debug!("  Subscribed symbols: {:?}", chunk_symbols);
+                info!("Sent {} subscription to OKX {} chunk {} with symbols: {:?}",
+                    stream_type, asset_type, chunk_idx, chunk_symbols);
             }
         }
         Ok(())
@@ -235,9 +236,10 @@ impl Feeder for OkxExchange {
         // Reset connection counter
         self.active_connections.store(0, Ordering::SeqCst);
 
-        for ((asset_type, chunk_idx), ws_stream_opt) in self.ws_streams.iter_mut() {
+        for ((asset_type, stream_type, chunk_idx), ws_stream_opt) in self.ws_streams.iter_mut() {
             if let Some(mut ws_stream) = ws_stream_opt.take() {
                 let asset_type = asset_type.clone();
+                let stream_type = stream_type.clone();
                 let chunk_idx = *chunk_idx;
                 let symbol_mapper = self.symbol_mapper.clone();
                 let active_connections = self.active_connections.clone();
@@ -247,8 +249,8 @@ impl Feeder for OkxExchange {
                 active_connections.fetch_add(1, Ordering::SeqCst);
 
                 tokio::spawn(async move {
-                    info!("OKX: Starting {} chunk {} stream processing (trade + orderbook)",
-                        asset_type, chunk_idx);
+                    info!("OKX: Starting {} {} chunk {} stream processing",
+                        asset_type, stream_type, chunk_idx);
 
                     // Get shutdown receiver
                     let mut shutdown_rx = get_shutdown_receiver();
@@ -260,7 +262,7 @@ impl Feeder for OkxExchange {
                         tokio::select! {
                             _ = shutdown_rx.changed() => {
                                 if *shutdown_rx.borrow() {
-                                    info!("OKX {} chunk {} received shutdown signal", asset_type, chunk_idx);
+                                    info!("OKX {} {} chunk {} received shutdown signal", asset_type, stream_type, chunk_idx);
                                     break;
                                 }
                             }
@@ -268,13 +270,13 @@ impl Feeder for OkxExchange {
                                 // Send ping to keep connection alive (OKX format)
                                 let ping_msg = "ping";
                                 if let Err(e) = ws_stream.send(Message::Text(ping_msg.into())).await {
-                                    warn!("Failed to send ping to OKX {} chunk {}: {}",
-                                        asset_type, chunk_idx, e);
-                                    error!("Connection lost for OKX {} chunk {}",
-                                        asset_type, chunk_idx);
+                                    warn!("Failed to send ping to OKX {} {} chunk {}: {}",
+                                        asset_type, stream_type, chunk_idx, e);
+                                    error!("Connection lost for OKX {} {} chunk {}",
+                                        asset_type, stream_type, chunk_idx);
 
                                     // Log disconnection to QuestDB
-                                    let connection_id = format!("okx-{}-{}", asset_type, chunk_idx);
+                                    let connection_id = format!("okx-{}-{}-{}", asset_type, stream_type, chunk_idx);
                                     let _ = crate::core::feeder_metrics::log_connection(
                                         "OKX",
                                         &connection_id,
@@ -282,18 +284,18 @@ impl Feeder for OkxExchange {
                                             reason: "ping failed".to_string()
                                         }
                                     ).await;
-                                    error!("[OKX_{}] WebSocket disconnected for chunk {} - ping failed", asset_type, chunk_idx);
+                                    error!("[OKX_{}_{}] WebSocket disconnected for chunk {} - ping failed", asset_type, stream_type, chunk_idx);
                                     break;
                                 }
-                                debug!("Sent ping to OKX {} chunk {}",
-                                    asset_type, chunk_idx);
+                                debug!("Sent ping to OKX {} {} chunk {}",
+                                    asset_type, stream_type, chunk_idx);
                             }
                             msg = ws_stream.next() => {
                                 match msg {
                                     Some(Ok(Message::Text(text))) => {
                                         // Add debug log to see all messages
                                         if !text.contains("pong") && !text.contains("heartbeat") {
-                                            debug!("OKX {} chunk {} received: {}", asset_type, chunk_idx,
+                                            debug!("OKX {} {} chunk {} received: {}", asset_type, stream_type, chunk_idx,
                                                 if text.len() > 200 { &text[..200] } else { &text });
                                         }
                                         process_okx_message(&text, symbol_mapper.clone(), &asset_type, &config);
@@ -305,12 +307,12 @@ impl Feeder for OkxExchange {
                                         }
                                     },
                                     Some(Ok(Message::Pong(_))) => {
-                                        debug!("Received pong from OKX {} chunk {}",
-                                            asset_type, chunk_idx);
+                                        debug!("Received pong from OKX {} {} chunk {}",
+                                            asset_type, stream_type, chunk_idx);
                                     },
                                     Some(Ok(Message::Close(frame))) => {
                                         warn!("WebSocket closed by OKX server: {:?}", frame);
-                                        error!("[OKX_{}] WebSocket issue for chunk {}", asset_type, chunk_idx);
+                                        error!("[OKX_{}_{}] WebSocket issue for chunk {}", asset_type, stream_type, chunk_idx);
                                         break;
                                     },
                                     Some(Ok(_)) => {
@@ -319,26 +321,26 @@ impl Feeder for OkxExchange {
                                     Some(Err(e)) => {
                                         let error_str = e.to_string();
                                         if error_str.contains("10054") || error_str.contains("forcibly closed") {
-                                            warn!("OKX {} chunk {} connection forcibly closed by remote host", asset_type, chunk_idx);
+                                            warn!("OKX {} {} chunk {} connection forcibly closed by remote host", asset_type, stream_type, chunk_idx);
                                         } else {
-                                            error!("WebSocket error for OKX {} chunk {}: {}",
-                                                asset_type, chunk_idx, e);
+                                            error!("WebSocket error for OKX {} {} chunk {}: {}",
+                                                asset_type, stream_type, chunk_idx, e);
                                         }
-                                        error!("[OKX_{}] WebSocket issue for chunk {}", asset_type, chunk_idx);
+                                        error!("[OKX_{}_{}] WebSocket issue for chunk {}", asset_type, stream_type, chunk_idx);
                                         break;
                                     },
                                     None => {
-                                        warn!("WebSocket stream ended for OKX {} chunk {}",
-                                            asset_type, chunk_idx);
-                                        error!("[OKX_{}] WebSocket issue for chunk {}", asset_type, chunk_idx);
+                                        warn!("WebSocket stream ended for OKX {} {} chunk {}",
+                                            asset_type, stream_type, chunk_idx);
+                                        error!("[OKX_{}_{}] WebSocket issue for chunk {}", asset_type, stream_type, chunk_idx);
                                         break;
                                     }
                                 }
                             }
                         }
                     }
-                    warn!("OKX {} chunk {} disconnected. Connection will be retried by feeder.",
-                        asset_type, chunk_idx);
+                    warn!("OKX {} {} chunk {} disconnected. Connection will be retried by feeder.",
+                        asset_type, stream_type, chunk_idx);
 
                     // Decrement active connection count
                     active_connections.fetch_sub(1, Ordering::SeqCst);

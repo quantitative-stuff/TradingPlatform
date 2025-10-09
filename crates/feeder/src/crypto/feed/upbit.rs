@@ -16,9 +16,9 @@ use crate::load_config::ExchangeConfig;
 pub struct UpbitExchange {
     config: ExchangeConfig,
     symbol_mapper: Arc<SymbolMapper>,
-    // Map of (asset_type, chunk_index) -> WebSocket connection
-    // Each connection handles up to 5 symbols with both trade and orderbook streams
-    ws_streams: HashMap<(String, usize), Option<WebSocketStream<MaybeTlsStream<tokio::net::TcpStream>>>>,
+    // Map of (asset_type, stream_type, chunk_index) -> WebSocket connection
+    // Each connection handles up to 10 symbols for either trade OR orderbook
+    ws_streams: HashMap<(String, String, usize), Option<WebSocketStream<MaybeTlsStream<tokio::net::TcpStream>>>>,
     // Track active connections for proper reconnection
     active_connections: Arc<AtomicUsize>,
 }
@@ -28,25 +28,25 @@ impl UpbitExchange {
         config: ExchangeConfig,
         symbol_mapper: Arc<SymbolMapper>,
     ) -> Self {
-        let limits = crate::core::robust_connection::ExchangeConnectionLimits::for_exchange("upbit");
-        let symbols_per_connection = limits.max_symbols_per_connection;
+        const SYMBOLS_PER_CONNECTION: usize = 10;
         let mut ws_streams = HashMap::new();
-        
-        // Calculate how many connections we need based on fault tolerance (20 symbols per connection)
+
+        // Calculate how many connections we need (10 symbols per connection)
         let num_symbols = config.subscribe_data.spot_symbols.len();
-        let num_chunks = (num_symbols + symbols_per_connection - 1) / symbols_per_connection;
-        
-        debug!("Upbit constructor - {} symbols, {} per connection = {} connections",
-                 num_symbols, symbols_per_connection, num_chunks);
-        
-        // Initialize connections for each chunk of symbols
-        // Now each connection will handle BOTH trade and orderbook for its symbols
+        let num_chunks = (num_symbols + SYMBOLS_PER_CONNECTION - 1) / SYMBOLS_PER_CONNECTION;
+
+        debug!("Upbit constructor - {} symbols, {} per connection = {} connections per stream type",
+                 num_symbols, SYMBOLS_PER_CONNECTION, num_chunks);
+
+        // Initialize separate connections for trade and orderbook streams
         for asset_type in &config.feed_config.asset_type {
-            for chunk_idx in 0..num_chunks {
-                ws_streams.insert(
-                    (asset_type.clone(), chunk_idx), 
-                    None
-                );
+            for stream_type in &["trade", "orderbook"] {
+                for chunk_idx in 0..num_chunks {
+                    ws_streams.insert(
+                        (asset_type.clone(), stream_type.to_string(), chunk_idx),
+                        None
+                    );
+                }
             }
         }
 
@@ -58,55 +58,54 @@ impl UpbitExchange {
         }
     }
 
-    async fn connect_websocket(&mut self, asset_type: &str, chunk_idx: usize) -> Result<()> {
-        let limits = crate::core::robust_connection::ExchangeConnectionLimits::for_exchange("upbit");
-        let symbols_per_connection = limits.max_symbols_per_connection;
-        
-        // Get the symbols for this chunk (20 symbols per connection for fault tolerance)
-        let start_idx = chunk_idx * symbols_per_connection;
-        let end_idx = std::cmp::min(start_idx + symbols_per_connection, self.config.subscribe_data.spot_symbols.len());
+    async fn connect_websocket(&mut self, asset_type: &str, stream_type: &str, chunk_idx: usize) -> Result<()> {
+        const SYMBOLS_PER_CONNECTION: usize = 10;
+
+        // Get the symbols for this chunk (10 symbols per connection)
+        let start_idx = chunk_idx * SYMBOLS_PER_CONNECTION;
+        let end_idx = std::cmp::min(start_idx + SYMBOLS_PER_CONNECTION, self.config.subscribe_data.spot_symbols.len());
         let chunk_symbols = &self.config.subscribe_data.spot_symbols[start_idx..end_idx];
-        
-        debug!("Attempting to connect to Upbit for {} chunk {}", asset_type, chunk_idx);
+
+        debug!("Attempting to connect to Upbit {} stream for {} chunk {}", stream_type, asset_type, chunk_idx);
         debug!("  Symbols in this connection: {:?}", chunk_symbols);
-        info!("Upbit {}-{}: Handling {} symbols ({})", 
-            asset_type, chunk_idx, chunk_symbols.len(),
-            chunk_symbols.iter().take(3).map(|s| s.as_str()).collect::<Vec<_>>().join(", ") + 
+        info!("Upbit {}-{}-{}: Handling {} symbols ({})",
+            asset_type, stream_type, chunk_idx, chunk_symbols.len(),
+            chunk_symbols.iter().take(3).map(|s| s.as_str()).collect::<Vec<_>>().join(", ") +
             if chunk_symbols.len() > 3 { "..." } else { "" });
-        
+
         let ws_url = &self.config.connect_config.ws_url;
-        
+
         match connect_with_large_buffer(ws_url).await {
             Ok((ws_stream, response)) => {
-                debug!("Upbit WebSocket connected for {} chunk {}", asset_type, chunk_idx);
+                debug!("Upbit WebSocket connected for {} {} chunk {}", asset_type, stream_type, chunk_idx);
                 debug!("Upbit Connection response: {:?}", response);
-                
+
                 // Update connection stats - mark as connected
                 {
                     let mut stats = CONNECTION_STATS.write();
-                    let key = format!("Upbit_{}", asset_type);
+                    let key = format!("Upbit_{}_{}", asset_type, stream_type);
                     let entry = stats.entry(key.clone()).or_default();
                     entry.connected += 1;
                     entry.total_connections += 1;
                     info!("[{}] Connection established for chunk {}", key, chunk_idx);
                 }
-                
+
                 // Log successful connection to QuestDB
-                let connection_id = format!("upbit-{}-{}", asset_type, chunk_idx);
+                let connection_id = format!("upbit-{}-{}-{}", asset_type, stream_type, chunk_idx);
                 let _ = crate::core::feeder_metrics::log_connection(
-                    "Upbit", 
-                    &connection_id, 
+                    "Upbit",
+                    &connection_id,
                     crate::connect_to_databse::ConnectionEvent::Connected
                 ).await;
-                
-                if let Some(stream_slot) = self.ws_streams.get_mut(&(asset_type.to_string(), chunk_idx)) {
+
+                if let Some(stream_slot) = self.ws_streams.get_mut(&(asset_type.to_string(), stream_type.to_string(), chunk_idx)) {
                     *stream_slot = Some(ws_stream);
                 }
                 Ok(())
             }
             Err(e) => {
-                error!("Failed to connect to Upbit WebSocket for {} chunk {}: {}", 
-                    asset_type, chunk_idx, e);
+                error!("Failed to connect to Upbit WebSocket for {} {} chunk {}: {}",
+                    asset_type, stream_type, chunk_idx, e);
                 Err(Error::Connection(format!("Upbit connection failed: {}", e)))
             }
         }
@@ -121,25 +120,25 @@ impl Feeder for UpbitExchange {
 
     async fn connect(&mut self) -> Result<()> {
         let mut retry_delay = Duration::from_secs(self.config.connect_config.initial_retry_delay_secs);
-        let connection_keys: Vec<(String, usize)> = self.ws_streams
+        let connection_keys: Vec<(String, String, usize)> = self.ws_streams
             .keys()
-            .map(|(asset, chunk)| (asset.clone(), *chunk))
+            .map(|(asset, stream, chunk)| (asset.clone(), stream.clone(), *chunk))
             .collect();
-        
-        info!("Upbit: Creating {} WebSocket connections (5 symbols each, with both trade and orderbook streams)", connection_keys.len());
-        
-        for (asset_type, chunk_idx) in connection_keys {
+
+        info!("Upbit: Creating {} WebSocket connections (10 symbols each, separate for trade and orderbook)", connection_keys.len());
+
+        for (asset_type, stream_type, chunk_idx) in connection_keys {
             loop {
-                match self.connect_websocket(&asset_type, chunk_idx).await {
+                match self.connect_websocket(&asset_type, &stream_type, chunk_idx).await {
                     Ok(()) => {
-                        debug!("Successfully connected to Upbit {} chunk {}", 
-                            asset_type, chunk_idx);
+                        debug!("Successfully connected to Upbit {} {} chunk {}",
+                            asset_type, stream_type, chunk_idx);
                         retry_delay = Duration::from_secs(self.config.connect_config.initial_retry_delay_secs);  // Reset delay on success
                         break;  // Move to next connection
                     },
                     Err(e) => {
-                        error!("Failed to connect to Upbit {} chunk {}: {}", 
-                            asset_type, chunk_idx, e);
+                        error!("Failed to connect to Upbit {} {} chunk {}: {}",
+                            asset_type, stream_type, chunk_idx, e);
                         debug!("Retrying in {} seconds...", retry_delay.as_secs());
                         tokio::time::sleep(retry_delay).await;
                         retry_delay = retry_delay.saturating_mul(2).min(Duration::from_secs(self.config.connect_config.max_retry_delay_secs));
@@ -155,43 +154,34 @@ impl Feeder for UpbitExchange {
     }
 
     async fn subscribe(&mut self) -> Result<()> {
-        let limits = crate::core::robust_connection::ExchangeConnectionLimits::for_exchange("upbit");
-        let symbols_per_connection = limits.max_symbols_per_connection;
-        
-        for ((asset_type, chunk_idx), ws_stream) in self.ws_streams.iter_mut() {
+        const SYMBOLS_PER_CONNECTION: usize = 10;
+
+        for ((asset_type, stream_type, chunk_idx), ws_stream) in self.ws_streams.iter_mut() {
             if let Some(ws_stream) = ws_stream {
-                // Get the symbols for this chunk (20 symbols per connection)
-                let start_idx = *chunk_idx * symbols_per_connection;
-                let end_idx = std::cmp::min(start_idx + symbols_per_connection, self.config.subscribe_data.spot_symbols.len());
+                // Get the symbols for this chunk (10 symbols per connection)
+                let start_idx = *chunk_idx * SYMBOLS_PER_CONNECTION;
+                let end_idx = std::cmp::min(start_idx + SYMBOLS_PER_CONNECTION, self.config.subscribe_data.spot_symbols.len());
                 let chunk_symbols = &self.config.subscribe_data.spot_symbols[start_idx..end_idx];
 
-                // Create Upbit subscription format (order matters!)
+                // Create Upbit subscription format - ONLY for this stream type
                 let mut subscription_array = vec![
-                    json!({ "ticket": format!("upbit-{}-{}", asset_type, chunk_idx) })
+                    json!({ "ticket": format!("upbit-{}-{}-{}", asset_type, stream_type, chunk_idx) })
                 ];
 
-                // Add subscriptions based on stream_type configuration
-                for stream_type in &self.config.subscribe_data.stream_type {
-                    match stream_type.as_str() {
-                        "trade" => {
-                            subscription_array.push(json!({
-                                "type": "trade",
-                                "codes": chunk_symbols,
-                                "isOnlyRealtime": true
-                            }));
-                        },
-                        "orderbook" => {
-                            if self.config.subscribe_data.order_depth > 0 {
-                                subscription_array.push(json!({
-                                    "type": "orderbook",
-                                    "codes": chunk_symbols,
-                                    "isOnlyRealtime": true
-                                }));
-                            }
-                        },
-                        _ => {
-                            warn!("Unknown stream type for Upbit: {}", stream_type);
-                        }
+                // Add ONLY the subscription for this stream type
+                if stream_type == "trade" {
+                    subscription_array.push(json!({
+                        "type": "trade",
+                        "codes": chunk_symbols,
+                        "isOnlyRealtime": true
+                    }));
+                } else if stream_type == "orderbook" {
+                    if self.config.subscribe_data.order_depth > 0 {
+                        subscription_array.push(json!({
+                            "type": "orderbook",
+                            "codes": chunk_symbols,
+                            "isOnlyRealtime": true
+                        }));
                     }
                 }
 
@@ -199,21 +189,20 @@ impl Feeder for UpbitExchange {
                 subscription_array.push(json!({ "format": "DEFAULT" }));
 
                 let subscription = serde_json::to_string(&subscription_array)?;
-                info!("Upbit subscription message: {}", subscription);
-                debug!("Sending subscription to Upbit {} chunk {} with {} symbols",
-                    asset_type, chunk_idx, chunk_symbols.len());
+                debug!("Sending {} subscription to Upbit {} chunk {} with {} symbols",
+                    stream_type, asset_type, chunk_idx, chunk_symbols.len());
 
                 let message = Message::Text(subscription.into());
                 ws_stream.send(message).await?;
-                info!("Sent subscription to Upbit {} chunk {} with symbols: {:?}",
-                    asset_type, chunk_idx, chunk_symbols);
-                
+                info!("Sent {} subscription to Upbit {} chunk {} with symbols: {:?}",
+                    stream_type, asset_type, chunk_idx, chunk_symbols);
+
                 // Log successful subscription with symbol details to QuestDB
-                let connection_id = format!("upbit-{}-{}", asset_type, chunk_idx);
+                let connection_id = format!("upbit-{}-{}-{}", asset_type, stream_type, chunk_idx);
                 let _ = crate::core::feeder_metrics::log_connection(
-                    "Upbit", 
-                    &connection_id, 
-                    crate::connect_to_databse::ConnectionEvent::SubscriptionSuccess { 
+                    "Upbit",
+                    &connection_id,
+                    crate::connect_to_databse::ConnectionEvent::SubscriptionSuccess {
                         symbols: chunk_symbols.iter().map(|s| s.to_string()).collect()
                     }
                 ).await;
@@ -226,9 +215,10 @@ impl Feeder for UpbitExchange {
         // Reset connection counter
         self.active_connections.store(0, Ordering::SeqCst);
 
-        for ((asset_type, chunk_idx), ws_stream_opt) in self.ws_streams.iter_mut() {
+        for ((asset_type, stream_type, chunk_idx), ws_stream_opt) in self.ws_streams.iter_mut() {
             if let Some(mut ws_stream) = ws_stream_opt.take() {
                 let asset_type = asset_type.clone();
+                let stream_type = stream_type.clone();
                 let chunk_idx = *chunk_idx;
                 let symbol_mapper = self.symbol_mapper.clone();
                 let active_connections = self.active_connections.clone();
@@ -236,10 +226,10 @@ impl Feeder for UpbitExchange {
 
                 // Increment active connection count
                 active_connections.fetch_add(1, Ordering::SeqCst);
-                
+
                 tokio::spawn(async move {
-                    debug!("Starting Upbit {} chunk {} stream processing (trade + orderbook)", 
-                        asset_type, chunk_idx);
+                    debug!("Starting Upbit {} {} chunk {} stream processing",
+                        asset_type, stream_type, chunk_idx);
                     
                     // Get shutdown receiver
                     let mut shutdown_rx = get_shutdown_receiver();
@@ -251,20 +241,20 @@ impl Feeder for UpbitExchange {
                         tokio::select! {
                             _ = shutdown_rx.changed() => {
                                 if *shutdown_rx.borrow() {
-                                    info!("Upbit {} chunk {} received shutdown signal", asset_type, chunk_idx);
+                                    info!("Upbit {} {} chunk {} received shutdown signal", asset_type, stream_type, chunk_idx);
                                     break;
                                 }
                             }
                             _ = ping_interval.tick() => {
                                 // Send ping to keep connection alive
                                 if let Err(e) = ws_stream.send(Message::Ping(vec![].into())).await {
-                                    warn!("Failed to send ping to Upbit {} chunk {}: {}", 
-                                        asset_type, chunk_idx, e);
-                                    error!("Connection lost for Upbit {} chunk {}", 
-                                        asset_type, chunk_idx);
-                                    
+                                    warn!("Failed to send ping to Upbit {} {} chunk {}: {}",
+                                        asset_type, stream_type, chunk_idx, e);
+                                    error!("Connection lost for Upbit {} {} chunk {}",
+                                        asset_type, stream_type, chunk_idx);
+
                                     // Log disconnection to QuestDB
-                                    let connection_id = format!("upbit-{}-{}", asset_type, chunk_idx);
+                                    let connection_id = format!("upbit-{}-{}-{}", asset_type, stream_type, chunk_idx);
                                     let _ = crate::core::feeder_metrics::log_connection(
                                         "Upbit", 
                                         &connection_id, 
@@ -272,11 +262,11 @@ impl Feeder for UpbitExchange {
                                             reason: "ping failed".to_string() 
                                         }
                                     ).await;
-                                    error!("[Upbit_{}] WebSocket disconnected for chunk {} - ping failed", asset_type, chunk_idx);
+                                    error!("[Upbit_{}_{}] WebSocket disconnected for chunk {} - ping failed", asset_type, stream_type, chunk_idx);
                                     break;
                                 }
-                                debug!("Sent ping to Upbit {} chunk {}", 
-                                    asset_type, chunk_idx);
+                                debug!("Sent ping to Upbit {} {} chunk {}",
+                                    asset_type, stream_type, chunk_idx);
                             }
                             msg = ws_stream.next() => {
                                 match msg {
@@ -288,7 +278,7 @@ impl Feeder for UpbitExchange {
                                         if let Ok(text) = String::from_utf8(data.to_vec()) {
                                             process_upbit_message(&text, symbol_mapper.clone(), &asset_type, &config);
                                         } else {
-                                            debug!("Failed to decode binary message from Upbit {} chunk {}", asset_type, chunk_idx);
+                                            debug!("Failed to decode binary message from Upbit {} {} chunk {}", asset_type, stream_type, chunk_idx);
                                         }
                                     },
                                     Some(Ok(Message::Ping(ping))) => {
@@ -298,12 +288,12 @@ impl Feeder for UpbitExchange {
                                         }
                                     },
                                     Some(Ok(Message::Pong(_))) => {
-                                        debug!("Received pong from Upbit {} chunk {}", 
-                                            asset_type, chunk_idx);
+                                        debug!("Received pong from Upbit {} {} chunk {}",
+                                            asset_type, stream_type, chunk_idx);
                                     },
                                     Some(Ok(Message::Close(frame))) => {
                                         warn!("WebSocket closed by Upbit server: {:?}", frame);
-                                        error!("[Upbit_{}] WebSocket issue for chunk {}", asset_type, chunk_idx);
+                                        error!("[Upbit_{}_{}] WebSocket issue for chunk {}", asset_type, stream_type, chunk_idx);
                                         break;
                                     },
                                     Some(Ok(_)) => {
@@ -312,27 +302,27 @@ impl Feeder for UpbitExchange {
                                     Some(Err(e)) => {
                                         let error_str = e.to_string();
                                         if error_str.contains("10054") || error_str.contains("forcibly closed") || error_str.contains("강제로 끊겼습니다") {
-                                            warn!("Upbit {} chunk {} connection forcibly closed by remote host (error 10054)", asset_type, chunk_idx);
+                                            warn!("Upbit {} {} chunk {} connection forcibly closed by remote host (error 10054)", asset_type, stream_type, chunk_idx);
                                         } else {
-                                            error!("WebSocket error for Upbit {} chunk {}: {}", 
-                                                asset_type, chunk_idx, e);
+                                            error!("WebSocket error for Upbit {} {} chunk {}: {}",
+                                                asset_type, stream_type, chunk_idx, e);
                                         }
-                                        error!("[Upbit_{}] WebSocket issue for chunk {}", asset_type, chunk_idx);
+                                        error!("[Upbit_{}_{}] WebSocket issue for chunk {}", asset_type, stream_type, chunk_idx);
                                         break;
                                     },
                                     None => {
-                                        warn!("WebSocket stream ended for Upbit {} chunk {}", 
-                                            asset_type, chunk_idx);
-                                        error!("[Upbit_{}] WebSocket issue for chunk {}", asset_type, chunk_idx);
+                                        warn!("WebSocket stream ended for Upbit {} {} chunk {}",
+                                            asset_type, stream_type, chunk_idx);
+                                        error!("[Upbit_{}_{}] WebSocket issue for chunk {}", asset_type, stream_type, chunk_idx);
                                         break;
                                     }
                                 }
                             }
                         }
                     }
-                    warn!("Upbit {} chunk {} disconnected. Connection will be retried by feeder.", 
-                        asset_type, chunk_idx);
-                    
+                    warn!("Upbit {} {} chunk {} disconnected. Connection will be retried by feeder.",
+                        asset_type, stream_type, chunk_idx);
+
                     // Decrement active connection count
                     active_connections.fetch_sub(1, Ordering::SeqCst);
                 });

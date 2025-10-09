@@ -18,28 +18,34 @@ use crate::load_config::ExchangeConfig;
 pub struct CoinbaseExchange {
     config: ExchangeConfig,
     symbol_mapper: Arc<SymbolMapper>,
-    ws_streams: HashMap<(String, usize), Option<WebSocketStream<MaybeTlsStream<tokio::net::TcpStream>>>>,
+    ws_streams: HashMap<(String, String, usize), Option<WebSocketStream<MaybeTlsStream<tokio::net::TcpStream>>>>,
     active_connections: Arc<AtomicUsize>,
     orderbooks: Arc<parking_lot::RwLock<HashMap<String, OrderBookData>>>,
 }
 
 impl CoinbaseExchange {
     pub fn new(config: ExchangeConfig, symbol_mapper: Arc<SymbolMapper>) -> Self {
-        const SYMBOLS_PER_CONNECTION: usize = 5;
+        const SYMBOLS_PER_CONNECTION: usize = 10;
         let mut ws_streams = HashMap::new();
-        
+
         let num_symbols = config.subscribe_data.spot_symbols.len();
         let num_chunks = (num_symbols + SYMBOLS_PER_CONNECTION - 1) / SYMBOLS_PER_CONNECTION;
-        
+
+        debug!("Coinbase constructor - {} symbols, {} per connection = {} connections per stream type",
+            num_symbols, SYMBOLS_PER_CONNECTION, num_chunks);
+
+        // Initialize separate connections for trade and orderbook streams
         for asset_type in &config.feed_config.asset_type {
-            for chunk_idx in 0..num_chunks {
-                ws_streams.insert(
-                    (asset_type.clone(), chunk_idx),
-                    None
-                );
+            for stream_type in &["trade", "orderbook"] {
+                for chunk_idx in 0..num_chunks {
+                    ws_streams.insert(
+                        (asset_type.clone(), stream_type.to_string(), chunk_idx),
+                        None
+                    );
+                }
             }
         }
-        
+
         Self {
             config,
             symbol_mapper,
@@ -58,12 +64,12 @@ impl Feeder for CoinbaseExchange {
 
     async fn connect(&mut self) -> Result<()> {
         let config = self.config.clone();
-        
-        info!("Coinbase: Creating {} WebSocket connections (5 symbols each, with both trade and orderbook streams)", self.ws_streams.len());
-        
-        for ((asset_type, chunk_idx), ws_stream) in self.ws_streams.iter_mut() {
+
+        info!("Coinbase: Creating {} WebSocket connections (10 symbols each, separate for trade and orderbook)", self.ws_streams.len());
+
+        for ((asset_type, stream_type, chunk_idx), ws_stream) in self.ws_streams.iter_mut() {
             let ws_url = "wss://advanced-trade-ws.coinbase.com";
-            debug!("Connecting to Coinbase {} chunk {}: {}", asset_type, chunk_idx, ws_url);
+            debug!("Connecting to Coinbase {} {} chunk {}: {}", asset_type, stream_type, chunk_idx, ws_url);
             
             let mut retry_count = 0;
             let max_retries = 5;
@@ -73,32 +79,32 @@ impl Feeder for CoinbaseExchange {
                 match connect_with_large_buffer(ws_url).await {
                     Ok((stream, _)) => {
                         *ws_stream = Some(stream);
-                        info!("Successfully connected to Coinbase {} chunk {} at {}", 
-                            asset_type, chunk_idx, ws_url);
-                        
+                        info!("Successfully connected to Coinbase {} {} chunk {} at {}",
+                            asset_type, stream_type, chunk_idx, ws_url);
+
                         // Update connection stats - mark as connected
                         {
                             let mut stats = CONNECTION_STATS.write();
-                            let key = format!("Coinbase_{}", asset_type);
+                            let key = format!("Coinbase_{}_{}", asset_type, stream_type);
                             let entry = stats.entry(key.clone()).or_default();
                             entry.connected += 1;
                             entry.total_connections += 1;
                             info!("[{}] Connection established for chunk {}", key, chunk_idx);
                         }
-                        
-                        debug!("Connected to Coinbase {} chunk {}", asset_type, chunk_idx);
+
+                        debug!("Connected to Coinbase {} {} chunk {}", asset_type, stream_type, chunk_idx);
                         break;
                     }
                     Err(e) => {
                         let error_str = e.to_string();
                         retry_count += 1;
-                        
-                        warn!("Connection error for Coinbase {} chunk {}: {}. Retrying in {} seconds (attempt {}/{})", 
-                            asset_type, chunk_idx, error_str, retry_delay.as_secs(), retry_count, max_retries);
-                        
+
+                        warn!("Connection error for Coinbase {} {} chunk {}: {}. Retrying in {} seconds (attempt {}/{})",
+                            asset_type, stream_type, chunk_idx, error_str, retry_delay.as_secs(), retry_count, max_retries);
+
                         if retry_count > max_retries {
-                            warn!("Failed to connect to Coinbase {} chunk {} after {} retries. Skipping this connection.", 
-                                asset_type, chunk_idx, max_retries);
+                            warn!("Failed to connect to Coinbase {} {} chunk {} after {} retries. Skipping this connection.",
+                                asset_type, stream_type, chunk_idx, max_retries);
                             *ws_stream = None;
                             break;
                         }
@@ -115,39 +121,38 @@ impl Feeder for CoinbaseExchange {
     }
 
     async fn subscribe(&mut self) -> Result<()> {
-        const SYMBOLS_PER_CONNECTION: usize = 5;
+        const SYMBOLS_PER_CONNECTION: usize = 10;
         let config = self.config.clone();
-        
-        for ((asset_type, chunk_idx), ws_stream) in self.ws_streams.iter_mut() {
+
+        for ((asset_type, stream_type, chunk_idx), ws_stream) in self.ws_streams.iter_mut() {
             if let Some(ws_stream) = ws_stream {
                 let start_idx = *chunk_idx * SYMBOLS_PER_CONNECTION;
                 let end_idx = std::cmp::min(start_idx + SYMBOLS_PER_CONNECTION, config.subscribe_data.spot_symbols.len());
                 let chunk_symbols = &config.subscribe_data.spot_symbols[start_idx..end_idx];
-                
-                // Coinbase requires separate subscription message for each channel
-                let channels = ["market_trades", "level2"];
-                for channel in channels {
-                    let subscribe_msg = json!({
-                        "type": "subscribe",
-                        "product_ids": chunk_symbols,
-                        "channel": channel
-                    });
 
-                    let subscription = subscribe_msg.to_string();
-                    info!("Sending {} subscription to Coinbase {} chunk {} with {} symbols",
-                        channel, asset_type, chunk_idx, chunk_symbols.len());
-                    debug!("Subscription details: {}", subscription);
+                // Subscribe to ONLY the channel for this stream type
+                let channel = if stream_type == "trade" {
+                    "market_trades"
+                } else {
+                    "level2"
+                };
 
-                    let message = Message::Text(subscription.into());
-                    ws_stream.send(message).await?;
-                    
-                    // Small delay between subscriptions
-                    tokio::time::sleep(Duration::from_millis(100)).await;
-                }
-                
-                info!("Sent subscriptions to Coinbase {} chunk {} with symbols: {:?}", 
-                    asset_type, chunk_idx, chunk_symbols);
-                debug!("Subscribed to Coinbase {} chunk {}", asset_type, chunk_idx);
+                let subscribe_msg = json!({
+                    "type": "subscribe",
+                    "product_ids": chunk_symbols,
+                    "channel": channel
+                });
+
+                let subscription = subscribe_msg.to_string();
+                info!("Sending {} subscription to Coinbase {} chunk {} with {} symbols",
+                    channel, asset_type, chunk_idx, chunk_symbols.len());
+                debug!("Subscription details: {}", subscription);
+
+                let message = Message::Text(subscription.into());
+                ws_stream.send(message).await?;
+
+                info!("Sent {} subscription to Coinbase {} chunk {} with symbols: {:?}",
+                    stream_type, asset_type, chunk_idx, chunk_symbols);
             }
         }
         Ok(())
@@ -156,9 +161,10 @@ impl Feeder for CoinbaseExchange {
     async fn start(&mut self) -> Result<()> {
         self.active_connections.store(0, Ordering::SeqCst);
 
-        for ((asset_type, chunk_idx), ws_stream_opt) in self.ws_streams.iter_mut() {
+        for ((asset_type, stream_type, chunk_idx), ws_stream_opt) in self.ws_streams.iter_mut() {
             if let Some(mut ws_stream) = ws_stream_opt.take() {
                 let asset_type = asset_type.clone();
+                let stream_type = stream_type.clone();
                 let chunk_idx = *chunk_idx;
                 let symbol_mapper = self.symbol_mapper.clone();
                 let active_connections = self.active_connections.clone();
@@ -168,8 +174,8 @@ impl Feeder for CoinbaseExchange {
                 active_connections.fetch_add(1, Ordering::SeqCst);
 
                 tokio::spawn(async move {
-                    debug!("Starting Coinbase {} chunk {} stream processing (trade + orderbook)", 
-                        asset_type, chunk_idx);
+                    debug!("Starting Coinbase {} {} chunk {} stream processing",
+                        asset_type, stream_type, chunk_idx);
                     
                     let mut shutdown_rx = get_shutdown_receiver();
                     
@@ -182,28 +188,28 @@ impl Feeder for CoinbaseExchange {
                         tokio::select! {
                             _ = shutdown_rx.changed() => {
                                 if *shutdown_rx.borrow() {
-                                    info!("Coinbase {} chunk {} received shutdown signal", asset_type, chunk_idx);
+                                    info!("Coinbase {} {} chunk {} received shutdown signal", asset_type, stream_type, chunk_idx);
                                     break;
                                 }
                             }
                             _ = ping_interval.tick() => {
                                 if let Err(e) = ws_stream.send(Message::Ping(vec![].into())).await {
-                                    warn!("Failed to send ping to Coinbase {} chunk {}: {}", 
-                                        asset_type, chunk_idx, e);
-                                    error!("[Coinbase_{}] WebSocket ping failed for chunk {}", asset_type, chunk_idx);
+                                    warn!("Failed to send ping to Coinbase {} {} chunk {}: {}",
+                                        asset_type, stream_type, chunk_idx, e);
+                                    error!("[Coinbase_{}_{}] WebSocket ping failed for chunk {}", asset_type, stream_type, chunk_idx);
                                     break;
                                 }
-                                debug!("Sent ping to Coinbase {} chunk {}", 
-                                    asset_type, chunk_idx);
+                                debug!("Sent ping to Coinbase {} {} chunk {}",
+                                    asset_type, stream_type, chunk_idx);
                             }
                             _ = health_check_interval.tick() => {
                                 if last_message_time.elapsed() > Duration::from_secs(300) { // 5 minutes
-                                    warn!("No messages received from Coinbase {} chunk {} for {} seconds, connection may be stale", 
-                                        asset_type, chunk_idx, last_message_time.elapsed().as_secs());
-                                    
+                                    warn!("No messages received from Coinbase {} {} chunk {} for {} seconds, connection may be stale",
+                                        asset_type, stream_type, chunk_idx, last_message_time.elapsed().as_secs());
+
                                     if let Err(e) = ws_stream.send(Message::Ping(b"health_check".to_vec().into())).await {
-                                        error!("Health check ping failed for Coinbase {} chunk {}: {}", 
-                                            asset_type, chunk_idx, e);
+                                        error!("Health check ping failed for Coinbase {} {} chunk {}: {}",
+                                            asset_type, stream_type, chunk_idx, e);
                                         break;
                                     }
                                 }
@@ -216,25 +222,25 @@ impl Feeder for CoinbaseExchange {
                                     },
                                     Some(Ok(Message::Pong(_))) => {
                                         last_message_time = std::time::Instant::now();
-                                        debug!("Received pong from Coinbase {} chunk {}", 
-                                            asset_type, chunk_idx);
+                                        debug!("Received pong from Coinbase {} {} chunk {}",
+                                            asset_type, stream_type, chunk_idx);
                                     },
                                     Some(Ok(Message::Ping(data))) => {
                                         last_message_time = std::time::Instant::now();
                                         if let Err(e) = ws_stream.send(Message::Pong(data)).await {
-                                            warn!("Failed to send pong to Coinbase {} chunk {}: {}", 
-                                                asset_type, chunk_idx, e);
+                                            warn!("Failed to send pong to Coinbase {} {} chunk {}: {}",
+                                                asset_type, stream_type, chunk_idx, e);
                                             break;
                                         }
-                                        debug!("Sent pong response to Coinbase {} chunk {}", 
-                                            asset_type, chunk_idx);
+                                        debug!("Sent pong response to Coinbase {} {} chunk {}",
+                                            asset_type, stream_type, chunk_idx);
                                     },
                                     Some(Ok(Message::Close(frame))) => {
-                                        warn!("Coinbase WebSocket closed for {} chunk {}: {:?}", 
-                                            asset_type, chunk_idx, frame);
+                                        warn!("Coinbase WebSocket closed for {} {} chunk {}: {:?}",
+                                            asset_type, stream_type, chunk_idx, frame);
                                         {
                                             let mut stats = CONNECTION_STATS.write();
-                                            let key = format!("Coinbase_{}", asset_type);
+                                            let key = format!("Coinbase_{}_{}", asset_type, stream_type);
                                             let entry = stats.entry(key.clone()).or_default();
                                             if entry.connected > 0 {
                                                 entry.connected -= 1;
@@ -248,11 +254,11 @@ impl Feeder for CoinbaseExchange {
                                         debug!("Received other message type from Coinbase: {:?}", msg);
                                     },
                                     Some(Err(e)) => {
-                                        warn!("Coinbase WebSocket error for {} chunk {}: {}", 
-                                            asset_type, chunk_idx, e);
+                                        warn!("Coinbase WebSocket error for {} {} chunk {}: {}",
+                                            asset_type, stream_type, chunk_idx, e);
                                         {
                                             let mut stats = CONNECTION_STATS.write();
-                                            let key = format!("Coinbase_{}", asset_type);
+                                            let key = format!("Coinbase_{}_{}", asset_type, stream_type);
                                             let entry = stats.entry(key.clone()).or_default();
                                             if entry.connected > 0 {
                                                 entry.connected -= 1;
@@ -263,11 +269,11 @@ impl Feeder for CoinbaseExchange {
                                         break;
                                     },
                                     None => {
-                                        warn!("WebSocket stream ended for Coinbase {} chunk {}", 
-                                            asset_type, chunk_idx);
+                                        warn!("WebSocket stream ended for Coinbase {} {} chunk {}",
+                                            asset_type, stream_type, chunk_idx);
                                         {
                                             let mut stats = CONNECTION_STATS.write();
-                                            let key = format!("Coinbase_{}", asset_type);
+                                            let key = format!("Coinbase_{}_{}", asset_type, stream_type);
                                             let entry = stats.entry(key.clone()).or_default();
                                             if entry.connected > 0 {
                                                 entry.connected -= 1;
@@ -281,9 +287,9 @@ impl Feeder for CoinbaseExchange {
                             }
                         }
                     }
-                    warn!("WebSocket connection lost for Coinbase {} chunk {}, will be retried by feeder", 
-                        asset_type, chunk_idx);
-                    
+                    warn!("WebSocket connection lost for Coinbase {} {} chunk {}, will be retried by feeder",
+                        asset_type, stream_type, chunk_idx);
+
                     active_connections.fetch_sub(1, Ordering::SeqCst);
                 });
             }
