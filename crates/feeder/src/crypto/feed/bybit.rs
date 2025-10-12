@@ -10,7 +10,7 @@ use tracing::{debug, info, warn, error};
 use futures_util::future::FutureExt;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use crate::core::{Feeder, SymbolMapper, CONNECTION_STATS, get_shutdown_receiver, get_multi_port_sender, parse_to_scaled_or_default};
+use crate::core::{Feeder, SymbolMapper, CONNECTION_STATS, get_shutdown_receiver, get_multi_port_sender, parse_to_scaled_or_default, MultiPortUdpSender};
 use crate::error::{Result, Error};
 use crate::load_config::ExchangeConfig;
 use crate::connect_to_databse::ConnectionEvent;
@@ -25,6 +25,7 @@ pub struct BybitExchange {
     ws_streams: HashMap<(String, String, usize), Option<WebSocketStream<MaybeTlsStream<tokio::net::TcpStream>>>>,
     // Track active connections for proper reconnection
     active_connections: Arc<AtomicUsize>,
+    multi_port_sender: Option<Arc<MultiPortUdpSender>>,
 }
 
 impl BybitExchange {
@@ -62,6 +63,16 @@ impl BybitExchange {
             symbol_mapper,
             ws_streams,
             active_connections: Arc::new(AtomicUsize::new(0)),
+            multi_port_sender: None, // Will be set in ensure_sender()
+        }
+    }
+
+    fn ensure_sender(&mut self) {
+        if self.multi_port_sender.is_none() {
+            if let Some(sender) = get_multi_port_sender() {
+                self.multi_port_sender = Some(sender);
+                info!("BybitExchange: multi_port_sender initialized");
+            }
         }
     }
 
@@ -232,6 +243,9 @@ impl Feeder for BybitExchange {
     }
 
     async fn start(&mut self) -> Result<()> {
+        // Ensure we have a sender before starting
+        self.ensure_sender();
+
         // Reset connection counter
         self.active_connections.store(0, Ordering::SeqCst);
 
@@ -243,6 +257,7 @@ impl Feeder for BybitExchange {
                 let symbol_mapper = self.symbol_mapper.clone();
                 let active_connections = self.active_connections.clone();
                 let config = self.config.clone();
+                let multi_port_sender = self.multi_port_sender.clone();
 
                 // Increment active connection count
                 active_connections.fetch_add(1, Ordering::SeqCst);
@@ -303,7 +318,7 @@ impl Feeder for BybitExchange {
                                 match msg {
                                     Some(Ok(Message::Text(text))) => {
                                         last_message_time = std::time::Instant::now(); // Update last message time
-                                        process_bybit_message(&text, symbol_mapper.clone(), &asset_type, &config);
+                                        process_bybit_message(&text, symbol_mapper.clone(), &asset_type, &config, multi_port_sender.clone());
                                     },
                                     Some(Ok(Message::Pong(_))) => {
                                         last_message_time = std::time::Instant::now(); // Update last message time
@@ -404,7 +419,7 @@ impl Feeder for BybitExchange {
 
 
 
-fn process_bybit_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_type: &str, config: &ExchangeConfig) {
+fn process_bybit_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_type: &str, config: &ExchangeConfig, multi_port_sender: Option<Arc<MultiPortUdpSender>>) {
     // Add debug to see all messages
     if !text.contains("pong") && !text.contains("ping") {
         debug!("{}", crate::core::safe_websocket_message_log("Bybit", text));
@@ -447,11 +462,11 @@ fn process_bybit_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_typ
             if data.is_array() {
                 // Snapshot: data is an array of trade objects.
                 for trade in data.as_array().unwrap() {
-                    process_bybit_trade(trade, &symbol_mapper, asset_type, config);
+                    process_bybit_trade(trade, &symbol_mapper, asset_type, config, &multi_port_sender);
                 }
             } else if data.is_object() {
                 // Delta: data is a single trade object.
-                process_bybit_trade(data, &symbol_mapper, asset_type, config);
+                process_bybit_trade(data, &symbol_mapper, asset_type, config, &multi_port_sender);
             } else {
                 debug!("[Bybit] Unexpected data format in trade message.");
             }
@@ -563,7 +578,7 @@ fn process_bybit_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_typ
             // Send UDP packet using multi-port sender if enabled, fallback to single-port
             debug!("Bybit: Receiving orderbook data for {}", orderbook.symbol);
             if USE_MULTI_PORT_UDP {
-                if let Some(sender) = get_multi_port_sender() {
+                if let Some(sender) = &multi_port_sender {
                     let _ = sender.send_orderbook_data(orderbook.clone());
                 } else {
                     // Fallback to single-port
@@ -590,7 +605,7 @@ fn process_bybit_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_typ
 }
 
 
-fn process_bybit_trade(trade_data: &Value, symbol_mapper: &Arc<SymbolMapper>, asset_type: &str, config: &ExchangeConfig) {
+fn process_bybit_trade(trade_data: &Value, symbol_mapper: &Arc<SymbolMapper>, asset_type: &str, config: &ExchangeConfig, multi_port_sender: &Option<Arc<MultiPortUdpSender>>) {
     let original_symbol = trade_data.get("s").and_then(Value::as_str).unwrap_or_default();
                 let common_symbol = match symbol_mapper.map("Bybit", original_symbol) {
                 Some(symbol) => symbol,
@@ -648,7 +663,7 @@ fn process_bybit_trade(trade_data: &Value, symbol_mapper: &Arc<SymbolMapper>, as
 
     // Send UDP packet using multi-port sender if enabled, fallback to single-port
     if USE_MULTI_PORT_UDP {
-        if let Some(sender) = get_multi_port_sender() {
+        if let Some(sender) = multi_port_sender {
             let _ = sender.send_trade_data(trade);
         } else {
             // Fallback to single-port

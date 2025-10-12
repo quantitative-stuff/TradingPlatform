@@ -11,7 +11,7 @@ use tracing::{debug, info, warn, error};
 use futures_util::future::FutureExt;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use crate::core::{OrderBookData, Feeder, SymbolMapper, CONNECTION_STATS, get_shutdown_receiver, parse_to_scaled_or_default};
+use crate::core::{OrderBookData, Feeder, SymbolMapper, CONNECTION_STATS, get_shutdown_receiver, parse_to_scaled_or_default, MultiPortUdpSender, get_multi_port_sender};
 use crate::error::Result;
 use crate::load_config::ExchangeConfig;
 
@@ -21,9 +21,18 @@ pub struct DeribitExchange {
     ws_streams: HashMap<(String, String, usize), Option<WebSocketStream<MaybeTlsStream<tokio::net::TcpStream>>>>,
     active_connections: Arc<AtomicUsize>,
     orderbooks: Arc<parking_lot::RwLock<HashMap<String, OrderBookData>>>,
+    multi_port_sender: Option<Arc<MultiPortUdpSender>>,
 }
 
 impl DeribitExchange {
+    fn ensure_sender(&mut self) {
+        if self.multi_port_sender.is_none() {
+            if let Some(sender) = get_multi_port_sender() {
+                self.multi_port_sender = Some(sender);
+                info!("DeribitExchange: multi_port_sender initialized");
+            }
+        }
+    }
     pub fn new(config: ExchangeConfig, symbol_mapper: Arc<SymbolMapper>) -> Self {
         const SYMBOLS_PER_CONNECTION: usize = 10;
         let mut ws_streams = HashMap::new();
@@ -53,6 +62,7 @@ impl DeribitExchange {
             ws_streams,
             active_connections: Arc::new(AtomicUsize::new(0)),
             orderbooks: Arc::new(parking_lot::RwLock::new(HashMap::new())),
+            multi_port_sender: None, // Will be set in ensure_sender()
         }
     }
 }
@@ -171,6 +181,9 @@ impl Feeder for DeribitExchange {
     }
 
         async fn start(&mut self) -> Result<()> {
+        // Ensure we have a sender before starting
+        self.ensure_sender();
+
         self.active_connections.store(0, Ordering::SeqCst);
 
         for ((asset_type, stream_type, chunk_idx), ws_stream_opt) in self.ws_streams.iter_mut() {
@@ -182,6 +195,7 @@ impl Feeder for DeribitExchange {
                 let active_connections = self.active_connections.clone();
                 let orderbooks = self.orderbooks.clone();
                 let config = self.config.clone();
+                let multi_port_sender = self.multi_port_sender.clone();
 
                 active_connections.fetch_add(1, Ordering::SeqCst);
 
@@ -230,7 +244,7 @@ impl Feeder for DeribitExchange {
                                 match msg {
                                     Some(Ok(Message::Text(text))) => {
                                         last_message_time = std::time::Instant::now();
-                                        process_deribit_message(&text, symbol_mapper.clone(), &asset_type, orderbooks.clone(), &config);
+                                        process_deribit_message(&text, symbol_mapper.clone(), &asset_type, orderbooks.clone(), &config, multi_port_sender.clone());
                                     },
                                     Some(Ok(Message::Pong(_))) => {
                                         last_message_time = std::time::Instant::now();
@@ -316,14 +330,23 @@ impl Feeder for DeribitExchange {
     }
 }
 
-fn process_deribit_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_type: &str, orderbooks: Arc<parking_lot::RwLock<HashMap<String, OrderBookData>>>, config: &ExchangeConfig) {
-    // Log all messages for debugging
-    info!("[DERIBIT DEBUG] Received message: {}", text);
+fn process_deribit_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_type: &str, orderbooks: Arc<parking_lot::RwLock<HashMap<String, OrderBookData>>>, config: &ExchangeConfig, multi_port_sender: Option<Arc<MultiPortUdpSender>>) {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static MESSAGE_COUNT: AtomicU64 = AtomicU64::new(0);
+
+    let count = MESSAGE_COUNT.fetch_add(1, Ordering::Relaxed);
+
+    // Only log initial messages for debugging, then periodic summaries
+    if count < 5 {
+        debug!("[DERIBIT] Initial message #{}: {}", count, &text[..text.len().min(200)]);
+    } else if count % 10000 == 0 {
+        debug!("[DERIBIT] Processed {} messages so far", count);
+    }
 
     let value: Value = match serde_json::from_str(text) {
         Ok(v) => v,
         Err(e) => {
-            error!("[DERIBIT ERROR] Failed to parse JSON: {} - Raw: {}", e, text);
+            debug!("[DERIBIT] JSON parse error: {} - Raw: {}", e, &text[..text.len().min(100)]);
             return;
         }
     };
@@ -331,14 +354,16 @@ fn process_deribit_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_t
     // Check for subscription result or error
     if let Some(id) = value.get("id") {
         if let Some(result) = value.get("result") {
-            info!("[DERIBIT RESPONSE] Subscription successful for id {}: {:?}", id, result);
+            debug!("[DERIBIT] Subscription successful for id {}: {:?}", id, result);
         } else if let Some(error) = value.get("error") {
             error!("[DERIBIT ERROR] Subscription failed for id {}: {:?}", id, error);
         }
     }
 
     if let Some(method) = value.get("method").and_then(Value::as_str) {
-        info!("[DERIBIT METHOD] Received method: {}", method);
+        if count % 1000 == 0 {
+            debug!("[DERIBIT] Processing method: {} (message #{})", method, count);
+        }
         if method == "subscription" {
             if let Some(params) = value.get("params") {
                 if let Some(channel) = params.get("channel").and_then(Value::as_str) {
@@ -384,11 +409,17 @@ fn process_deribit_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_t
                                     let mut trades = crate::core::TRADES.write();
                                     trades.push(trade.clone());
                                 }
-                                
-                                if let Some(sender) = crate::core::get_multi_port_sender() {
-                                    let _ = sender.send_trade_data(trade);
+
+                                if let Some(sender) = &multi_port_sender {
+                                    if let Err(e) = sender.send_trade_data(trade.clone()) {
+                                        error!("[DERIBIT] Failed to send trade UDP: {}", e);
+                                    } else if count % 5000 == 0 {
+                                        debug!("[DERIBIT] Successfully sending trades via UDP (sample: {} @ {})", trade.symbol, trade.price);
+                                    }
+                                } else if count % 500 == 0 {
+                                    warn!("[DERIBIT] Multi-port sender not available for trade data");
                                 }
-                                
+
                                 crate::core::COMPARE_NOTIFY.notify_waiters();
                             }
                         }
@@ -434,8 +465,14 @@ fn process_deribit_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_t
                                     trades.push(trade.clone());
                                 }
 
-                                if let Some(sender) = crate::core::get_multi_port_sender() {
-                                    let _ = sender.send_trade_data(trade);
+                                if let Some(sender) = &multi_port_sender {
+                                    if let Err(e) = sender.send_trade_data(trade.clone()) {
+                                        error!("[DERIBIT] Failed to send ticker trade UDP: {}", e);
+                                    } else if count % 5000 == 0 {
+                                        debug!("[DERIBIT] Successfully sending ticker trades via UDP (sample: {} @ {})", trade.symbol, trade.price);
+                                    }
+                                } else if count % 500 == 0 {
+                                    warn!("[DERIBIT] Multi-port sender not available for ticker trade data");
                                 }
 
                                 crate::core::COMPARE_NOTIFY.notify_waiters();
@@ -536,10 +573,17 @@ fn process_deribit_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_t
                             orderbook.bids.sort_by(|a, b| b.0.cmp(&a.0));
                             orderbook.asks.sort_by(|a, b| a.0.cmp(&b.0));
 
-                            if let Some(sender) = crate::core::get_multi_port_sender() {
-                                let _ = sender.send_orderbook_data(orderbook.clone());
+                            if let Some(sender) = &multi_port_sender {
+                                if let Err(e) = sender.send_orderbook_data(orderbook.clone()) {
+                                    error!("[DERIBIT] Failed to send orderbook UDP: {}", e);
+                                } else if count % 5000 == 0 {
+                                    debug!("[DERIBIT] Successfully sending orderbook updates via UDP (sample: {} with {} bids, {} asks)",
+                                        orderbook.symbol, orderbook.bids.len(), orderbook.asks.len());
+                                }
+                            } else if count % 500 == 0 {
+                                warn!("[DERIBIT] Multi-port sender not available for orderbook data");
                             }
-                            
+
                             crate::core::COMPARE_NOTIFY.notify_waiters();
                         }
                     }

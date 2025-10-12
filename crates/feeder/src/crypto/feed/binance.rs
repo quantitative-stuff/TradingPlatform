@@ -40,6 +40,15 @@ pub struct BinanceExchange {
 }
 
 impl BinanceExchange {
+    fn ensure_sender(&mut self) {
+        if self.multi_port_sender.is_none() {
+            if let Some(sender) = get_multi_port_sender() {
+                self.multi_port_sender = Some(sender);
+                info!("BinanceExchange: multi_port_sender initialized");
+            }
+        }
+    }
+
     pub fn new(
         config: ExchangeConfig,
         symbol_mapper: Arc<SymbolMapper>,
@@ -68,12 +77,8 @@ impl BinanceExchange {
             }
         }
 
-        // Use global multi-port UDP sender (initialized in feeder_direct)
-        let multi_port_sender = if USE_MULTI_PORT_UDP {
-            get_multi_port_sender()
-        } else {
-            None
-        };
+        // Multi-port sender will be initialized in ensure_sender()
+        let multi_port_sender = None;
 
         Self {
             config,
@@ -232,6 +237,9 @@ impl Feeder for BinanceExchange {
     }
 
     async fn start(&mut self) -> Result<()> {
+        // Ensure we have a sender before starting
+        self.ensure_sender();
+
         // Reset connection counter
         self.active_connections.store(0, Ordering::SeqCst);
 

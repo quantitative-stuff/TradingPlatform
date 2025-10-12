@@ -210,17 +210,11 @@ pub async fn spawn_coinbase_exchange(
 ) -> JoinHandle<()> {
     tokio::spawn(async move {
         let mut config_for_coinbase = config.base_config.clone();
-        let mut all_symbols = Vec::new();
 
-        for asset_type in &config.base_config.feed_config.asset_type {
-            match asset_type.as_str() {
-                "spot" => all_symbols.extend(config.spot_symbols.clone()),
-                "futures" => all_symbols.extend(config.futures_symbols.clone()),
-                _ => {},
-            }
-        }
+        // Coinbase only supports spot trading, so we only use spot_symbols
+        // And Coinbase reads from spot_symbols field, not codes field
+        config_for_coinbase.subscribe_data.spot_symbols = config.spot_symbols.clone();
 
-        config_for_coinbase.subscribe_data.codes = all_symbols;
         let mut exchange = CoinbaseExchange::new(config_for_coinbase, symbol_mapper);
 
         loop {
@@ -314,16 +308,13 @@ pub async fn spawn_deribit_exchange(
 ) -> JoinHandle<()> {
     tokio::spawn(async move {
         let mut config_for_deribit = config.base_config.clone();
-        let mut all_symbols = Vec::new();
 
-        for asset_type in &config.base_config.feed_config.asset_type {
-            match asset_type.as_str() {
-                "futures" | "options" => all_symbols.extend(config.futures_symbols.clone()),
-                _ => {},
-            }
-        }
+        // Deribit reads from futures_symbols and option_symbols fields directly
+        // It doesn't use the codes field, so we need to set these specific fields
+        config_for_deribit.subscribe_data.futures_symbols = config.futures_symbols.clone();
+        // Note: option_symbols would come from config if we had them, for now using empty
+        config_for_deribit.subscribe_data.option_symbols = Vec::new();
 
-        config_for_deribit.subscribe_data.codes = all_symbols;
         let mut exchange = DeribitExchange::new(config_for_deribit, symbol_mapper);
 
         loop {

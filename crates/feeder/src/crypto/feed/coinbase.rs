@@ -25,6 +25,15 @@ pub struct CoinbaseExchange {
 }
 
 impl CoinbaseExchange {
+    fn ensure_sender(&mut self) {
+        if self.multi_port_sender.is_none() {
+            if let Some(sender) = get_multi_port_sender() {
+                self.multi_port_sender = Some(sender);
+                info!("CoinbaseExchange: multi_port_sender initialized");
+            }
+        }
+    }
+
     pub fn new(config: ExchangeConfig, symbol_mapper: Arc<SymbolMapper>) -> Self {
         const SYMBOLS_PER_CONNECTION: usize = 10;
         let mut ws_streams = HashMap::new();
@@ -53,7 +62,7 @@ impl CoinbaseExchange {
             ws_streams,
             active_connections: Arc::new(AtomicUsize::new(0)),
             orderbooks: Arc::new(parking_lot::RwLock::new(HashMap::new())),
-            multi_port_sender: get_multi_port_sender(),
+            multi_port_sender: None, // Will be set in ensure_sender()
         }
     }
 }
@@ -161,6 +170,9 @@ impl Feeder for CoinbaseExchange {
     }
 
     async fn start(&mut self) -> Result<()> {
+        // Ensure we have a sender before starting
+        self.ensure_sender();
+
         self.active_connections.store(0, Ordering::SeqCst);
 
         for ((asset_type, stream_type, chunk_idx), ws_stream_opt) in self.ws_streams.iter_mut() {
@@ -312,16 +324,19 @@ fn process_coinbase_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_
     static MESSAGE_COUNT: AtomicU64 = AtomicU64::new(0);
 
     let count = MESSAGE_COUNT.fetch_add(1, Ordering::Relaxed);
-    if count % 100 == 0 {
+
+    // Only log initial messages for debugging connection, then periodic summaries
+    if count < 5 {
+        debug!("Coinbase initial message #{}: {}", count, &text[..text.len().min(200)]);
+    } else if count % 10000 == 0 {
         debug!("Coinbase: Processed {} messages so far", count);
     }
 
-    // Log ALL messages to diagnose subscription issues
-    if count < 50 || count % 100 == 0 {
-        info!("Coinbase message #{}: {}", count, &text[..text.len().min(500)]);
-    }
-    if !text.contains("ticker") && !text.contains("l2update") && !text.contains("snapshot") && !text.contains("market_trades") {
-        info!("Coinbase non-standard message: {}", text);
+    // Only log truly unusual messages (not market data)
+    if !text.contains("ticker") && !text.contains("l2update") && !text.contains("snapshot") && !text.contains("market_trades")
+        && !text.contains("subscriptions") && !text.contains("heartbeat") {
+        debug!("Coinbase non-standard message type: {}",
+            text.get(0..100).unwrap_or(text));
     }
     let value: Value = match serde_json::from_str(text) {
         Ok(v) => v,
@@ -383,8 +398,9 @@ fn process_coinbase_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_
                             if let Some(sender) = &multi_port_sender {
                                 match sender.send_trade_data(trade.clone()) {
                                     Ok(_) => {
-                                        if count % 1000 == 0 {
-                                            debug!("Coinbase: Successfully sent UDP packet for {} trade at price {}", trade.symbol, trade.price);
+                                        // Log success only occasionally to avoid log spam
+                                        if count % 5000 == 0 {
+                                            debug!("Coinbase: Successfully sending trades via UDP (sample: {} @ {})", trade.symbol, trade.price);
                                         }
                                     }
                                     Err(e) => {
@@ -392,8 +408,9 @@ fn process_coinbase_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_
                                     }
                                 }
                             } else {
-                                if count % 100 == 0 {
-                                    error!("Coinbase: Multi-port sender not initialized!");
+                                // Log error only occasionally to avoid log spam when sender is not ready
+                                if count % 500 == 0 {
+                                    warn!("Coinbase: Multi-port sender not available for trade data");
                                 }
                             }
 
@@ -458,11 +475,12 @@ fn process_coinbase_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_
 
                 if let Some(sender) = &multi_port_sender {
                     if let Err(e) = sender.send_trade_data(trade.clone()) {
-                        error!("Coinbase: Failed to send trade UDP: {}", e);
+                        error!("Coinbase: Failed to send ticker trade UDP: {}", e);
+                    } else if count % 5000 == 0 {
+                        debug!("Coinbase: Successfully sending ticker trades via UDP (sample: {} @ {})", trade.symbol, trade.price);
                     }
-                    if count % 1000 == 0 {
-                        debug!("Coinbase: Sent UDP packet for {} trade at price {}", trade.symbol, trade.price);
-                    }
+                } else if count % 500 == 0 {
+                    warn!("Coinbase: Multi-port sender not available for ticker trade data");
                 }
 
                 crate::core::COMPARE_NOTIFY.notify_waiters();
@@ -529,12 +547,13 @@ fn process_coinbase_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_
 
                 if let Some(sender) = &multi_port_sender {
                     if let Err(e) = sender.send_orderbook_data(orderbook.clone()) {
-                        error!("Coinbase: Failed to send orderbook UDP: {}", e);
-                    }
-                    if count % 1000 == 0 {
-                        debug!("Coinbase: Sent UDP packet for {} orderbook with {} bids, {} asks",
+                        error!("Coinbase: Failed to send orderbook snapshot UDP: {}", e);
+                    } else if count % 5000 == 0 {
+                        debug!("Coinbase: Successfully sending orderbook snapshots via UDP (sample: {} with {} bids, {} asks)",
                             orderbook.symbol, orderbook.bids.len(), orderbook.asks.len());
                     }
+                } else if count % 500 == 0 {
+                    warn!("Coinbase: Multi-port sender not available for orderbook snapshot data");
                 }
                 
                 crate::core::COMPARE_NOTIFY.notify_waiters();
@@ -607,11 +626,12 @@ fn process_coinbase_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_
                     if let Some(sender) = &multi_port_sender {
                         if let Err(e) = sender.send_orderbook_data(orderbook.clone()) {
                             error!("Coinbase: Failed to send orderbook update UDP: {}", e);
-                        }
-                        if count % 1000 == 0 {
-                            debug!("Coinbase: Sent UDP packet for {} orderbook update with {} bids, {} asks",
+                        } else if count % 5000 == 0 {
+                            debug!("Coinbase: Successfully sending orderbook updates via UDP (sample: {} with {} bids, {} asks)",
                                 orderbook.symbol, orderbook.bids.len(), orderbook.asks.len());
                         }
+                    } else if count % 500 == 0 {
+                        warn!("Coinbase: Multi-port sender not available for orderbook update data");
                     }
                     
                     crate::core::COMPARE_NOTIFY.notify_waiters();

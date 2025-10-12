@@ -281,20 +281,21 @@ fn parse_name(bytes: &[u8]) -> String {
     String::from_utf8_lossy(&bytes[..null_pos]).to_string()
 }
 
-// Global instance
-use once_cell::sync::Lazy;
+// Global instance - Using OnceCell for lock-free reads after initialization
+use once_cell::sync::OnceCell;
 
-static GLOBAL_MULTI_PORT_SENDER: Lazy<RwLock<Option<Arc<MultiPortUdpSender>>>> =
-    Lazy::new(|| RwLock::new(None));
+static GLOBAL_MULTI_PORT_SENDER: OnceCell<Arc<MultiPortUdpSender>> = OnceCell::new();
 
 pub fn init_global_multi_port_sender() -> Result<()> {
     let sender = MultiPortUdpSender::new()?;
-    *GLOBAL_MULTI_PORT_SENDER.write() = Some(Arc::new(sender));
+    GLOBAL_MULTI_PORT_SENDER.set(Arc::new(sender))
+        .map_err(|_| anyhow::anyhow!("Multi-port sender already initialized"))?;
+    info!("Global multi-port UDP sender initialized successfully");
     Ok(())
 }
 
 pub fn get_multi_port_sender() -> Option<Arc<MultiPortUdpSender>> {
-    GLOBAL_MULTI_PORT_SENDER.read().as_ref().map(Arc::clone)
+    GLOBAL_MULTI_PORT_SENDER.get().cloned()
 }
 
 #[cfg(test)]

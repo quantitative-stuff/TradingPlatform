@@ -11,7 +11,7 @@ use tracing::{debug, info, warn, error};
 use futures_util::future::FutureExt;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use crate::core::{OrderBookData, Feeder, SymbolMapper, CONNECTION_STATS, get_shutdown_receiver, parse_to_scaled_or_default};
+use crate::core::{OrderBookData, Feeder, SymbolMapper, CONNECTION_STATS, get_shutdown_receiver, parse_to_scaled_or_default, MultiPortUdpSender, get_multi_port_sender};
 use crate::error::Result;
 use crate::load_config::ExchangeConfig;
 
@@ -22,9 +22,19 @@ pub struct BithumbExchange {
     ws_streams: HashMap<(String, String, usize), Option<WebSocketStream<MaybeTlsStream<tokio::net::TcpStream>>>>,
     active_connections: Arc<AtomicUsize>,
     orderbooks: Arc<parking_lot::RwLock<HashMap<String, OrderBookData>>>,
+    multi_port_sender: Option<Arc<MultiPortUdpSender>>,
 }
 
 impl BithumbExchange {
+    fn ensure_sender(&mut self) {
+        if self.multi_port_sender.is_none() {
+            if let Some(sender) = get_multi_port_sender() {
+                self.multi_port_sender = Some(sender);
+                info!("BithumbExchange: multi_port_sender initialized");
+            }
+        }
+    }
+
     pub fn new(config: ExchangeConfig, symbol_mapper: Arc<SymbolMapper>) -> Self {
         const SYMBOLS_PER_CONNECTION: usize = 10;
         let mut ws_streams = HashMap::new();
@@ -50,6 +60,7 @@ impl BithumbExchange {
             ws_streams,
             active_connections: Arc::new(AtomicUsize::new(0)),
             orderbooks: Arc::new(parking_lot::RwLock::new(HashMap::new())),
+            multi_port_sender: None, // Will be set in ensure_sender()
         }
     }
 }
@@ -162,6 +173,9 @@ impl Feeder for BithumbExchange {
     }
 
         async fn start(&mut self) -> Result<()> {
+        // Ensure we have a sender before starting
+        self.ensure_sender();
+
         self.active_connections.store(0, Ordering::SeqCst);
 
         for ((asset_type, stream_type, chunk_idx), ws_stream_opt) in self.ws_streams.iter_mut() {
@@ -173,6 +187,7 @@ impl Feeder for BithumbExchange {
                 let active_connections = self.active_connections.clone();
                 let orderbooks = self.orderbooks.clone();
                 let config = self.config.clone();
+                let multi_port_sender = self.multi_port_sender.clone();
 
                 active_connections.fetch_add(1, Ordering::SeqCst);
 
@@ -223,7 +238,7 @@ impl Feeder for BithumbExchange {
                                     Some(Ok(Message::Text(text))) => {
                                         debug!("Bithumb {} {} chunk {} received text message", asset_type, stream_type, chunk_idx);
                                         last_message_time = std::time::Instant::now();
-                                        process_bithumb_message(&text, symbol_mapper.clone(), &asset_type, orderbooks.clone(), &config);
+                                        process_bithumb_message(&text, symbol_mapper.clone(), &asset_type, orderbooks.clone(), &config, multi_port_sender.clone());
                                     },
                                     Some(Ok(Message::Binary(data))) => {
                                         // Bithumb sends binary data, decode it as UTF-8
@@ -234,7 +249,7 @@ impl Feeder for BithumbExchange {
                                                     asset_type, stream_type, chunk_idx, text);
                                             }
                                             last_message_time = std::time::Instant::now();
-                                            process_bithumb_message(&text, symbol_mapper.clone(), &asset_type, orderbooks.clone(), &config);
+                                            process_bithumb_message(&text, symbol_mapper.clone(), &asset_type, orderbooks.clone(), &config, multi_port_sender.clone());
                                         } else {
                                             debug!("Bithumb {} {} chunk {} received binary message ({} bytes) - failed to decode as UTF-8",
                                                 asset_type, stream_type, chunk_idx, data.len());
@@ -327,7 +342,7 @@ impl Feeder for BithumbExchange {
     }
 }
 
-fn process_bithumb_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_type: &str, orderbooks: Arc<parking_lot::RwLock<HashMap<String, OrderBookData>>>, config: &ExchangeConfig) {
+fn process_bithumb_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_type: &str, orderbooks: Arc<parking_lot::RwLock<HashMap<String, OrderBookData>>>, config: &ExchangeConfig, multi_port_sender: Option<Arc<MultiPortUdpSender>>) {
     use std::sync::atomic::{AtomicU64, Ordering};
     static MESSAGE_COUNT: AtomicU64 = AtomicU64::new(0);
 
@@ -437,7 +452,7 @@ fn process_bithumb_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_t
                     trades.push(trade.clone());
                 }
 
-                if let Some(sender) = crate::core::get_multi_port_sender() {
+                if let Some(sender) = &multi_port_sender {
                     let _ = sender.send_trade_data(trade.clone());
                     if count % 100 == 0 {
                         debug!("Bithumb: Sent UDP packet for {} trade at price {}", trade.symbol, trade.price);
@@ -520,7 +535,7 @@ fn process_bithumb_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_t
                     }
 
                     // Send UDP packet for orderbook
-                    if let Some(sender) = crate::core::get_multi_port_sender() {
+                    if let Some(sender) = &multi_port_sender {
                         let _ = sender.send_orderbook_data(orderbook);
                     }
                 }
