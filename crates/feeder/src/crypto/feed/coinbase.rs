@@ -11,7 +11,7 @@ use tracing::{debug, info, warn, error};
 use futures_util::future::FutureExt;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use crate::core::{OrderBookData, Feeder, SymbolMapper, CONNECTION_STATS, get_shutdown_receiver, parse_to_scaled_or_default};
+use crate::core::{OrderBookData, Feeder, SymbolMapper, CONNECTION_STATS, get_shutdown_receiver, parse_to_scaled_or_default, MultiPortUdpSender, get_multi_port_sender};
 use crate::error::Result;
 use crate::load_config::ExchangeConfig;
 
@@ -21,6 +21,7 @@ pub struct CoinbaseExchange {
     ws_streams: HashMap<(String, String, usize), Option<WebSocketStream<MaybeTlsStream<tokio::net::TcpStream>>>>,
     active_connections: Arc<AtomicUsize>,
     orderbooks: Arc<parking_lot::RwLock<HashMap<String, OrderBookData>>>,
+    multi_port_sender: Option<Arc<MultiPortUdpSender>>,
 }
 
 impl CoinbaseExchange {
@@ -52,6 +53,7 @@ impl CoinbaseExchange {
             ws_streams,
             active_connections: Arc::new(AtomicUsize::new(0)),
             orderbooks: Arc::new(parking_lot::RwLock::new(HashMap::new())),
+            multi_port_sender: get_multi_port_sender(),
         }
     }
 }
@@ -170,6 +172,7 @@ impl Feeder for CoinbaseExchange {
                 let active_connections = self.active_connections.clone();
                 let orderbooks = self.orderbooks.clone();
                 let config = self.config.clone();
+                let multi_port_sender = self.multi_port_sender.clone();
 
                 active_connections.fetch_add(1, Ordering::SeqCst);
 
@@ -218,7 +221,7 @@ impl Feeder for CoinbaseExchange {
                                 match msg {
                                     Some(Ok(Message::Text(text))) => {
                                         last_message_time = std::time::Instant::now();
-                                        process_coinbase_message(&text, symbol_mapper.clone(), &asset_type, orderbooks.clone(), &config);
+                                        process_coinbase_message(&text, symbol_mapper.clone(), &asset_type, orderbooks.clone(), &config, multi_port_sender.clone());
                                     },
                                     Some(Ok(Message::Pong(_))) => {
                                         last_message_time = std::time::Instant::now();
@@ -304,7 +307,7 @@ impl Feeder for CoinbaseExchange {
     }
 }
 
-fn process_coinbase_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_type: &str, orderbooks: Arc<parking_lot::RwLock<HashMap<String, OrderBookData>>>, config: &ExchangeConfig) {
+fn process_coinbase_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_type: &str, orderbooks: Arc<parking_lot::RwLock<HashMap<String, OrderBookData>>>, config: &ExchangeConfig, multi_port_sender: Option<Arc<MultiPortUdpSender>>) {
     use std::sync::atomic::{AtomicU64, Ordering};
     static MESSAGE_COUNT: AtomicU64 = AtomicU64::new(0);
 
@@ -313,8 +316,12 @@ fn process_coinbase_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_
         debug!("Coinbase: Processed {} messages so far", count);
     }
 
-    if !text.contains("ticker") && !text.contains("l2update") && !text.contains("snapshot") {
-        debug!("{}", crate::core::safe_websocket_message_log("Coinbase", text));
+    // Log ALL messages to diagnose subscription issues
+    if count < 50 || count % 100 == 0 {
+        info!("Coinbase message #{}: {}", count, &text[..text.len().min(500)]);
+    }
+    if !text.contains("ticker") && !text.contains("l2update") && !text.contains("snapshot") && !text.contains("market_trades") {
+        info!("Coinbase non-standard message: {}", text);
     }
     let value: Value = match serde_json::from_str(text) {
         Ok(v) => v,
@@ -323,6 +330,81 @@ fn process_coinbase_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_
             return;
         }
     };
+
+    // Check for market_trades channel messages (Advanced Trade API format)
+    if let Some(channel) = value.get("channel").and_then(Value::as_str) {
+        if channel == "market_trades" {
+            if let Some(events) = value.get("events").and_then(Value::as_array) {
+                for event in events {
+                    if let Some(trades_arr) = event.get("trades").and_then(Value::as_array) {
+                        for trade_data in trades_arr {
+                            let original_symbol = trade_data.get("product_id").and_then(Value::as_str).unwrap_or_default();
+                            let common_symbol = match symbol_mapper.map("Coinbase", original_symbol) {
+                                Some(symbol) => symbol,
+                                None => original_symbol.to_string()
+                            };
+
+                            // HFT: Get precision from config
+                            let price_precision = config.feed_config.get_price_precision(&common_symbol);
+                            let qty_precision = config.feed_config.get_quantity_precision(&common_symbol);
+
+                            // HFT: Parse directly to scaled i64 (NO f64!)
+                            let price = trade_data.get("price")
+                                .and_then(Value::as_str)
+                                .map(|s| parse_to_scaled_or_default(s, price_precision))
+                                .unwrap_or(0);
+                            let quantity = trade_data.get("size")
+                                .and_then(Value::as_str)
+                                .map(|s| parse_to_scaled_or_default(s, qty_precision))
+                                .unwrap_or(0);
+                            let timestamp = trade_data.get("time")
+                                .and_then(Value::as_str)
+                                .and_then(|s| s.parse::<chrono::DateTime<chrono::Utc>>().ok())
+                                .map(|dt| dt.timestamp_millis().max(0) as u64)
+                                .unwrap_or_default();
+
+                            let trade = crate::core::TradeData {
+                                exchange: "Coinbase".to_string(),
+                                symbol: common_symbol.clone(),
+                                asset_type: asset_type.to_string(),
+                                price,
+                                quantity,
+                                price_precision,
+                                quantity_precision: qty_precision,
+                                timestamp,
+                                timestamp_unit: config.feed_config.timestamp_unit,
+                            };
+
+                            {
+                                let mut trades = crate::core::TRADES.write();
+                                trades.push(trade.clone());
+                            }
+
+                            if let Some(sender) = &multi_port_sender {
+                                match sender.send_trade_data(trade.clone()) {
+                                    Ok(_) => {
+                                        if count % 1000 == 0 {
+                                            debug!("Coinbase: Successfully sent UDP packet for {} trade at price {}", trade.symbol, trade.price);
+                                        }
+                                    }
+                                    Err(e) => {
+                                        error!("Coinbase: Failed to send UDP packet for {} trade: {}", trade.symbol, e);
+                                    }
+                                }
+                            } else {
+                                if count % 100 == 0 {
+                                    error!("Coinbase: Multi-port sender not initialized!");
+                                }
+                            }
+
+                            crate::core::COMPARE_NOTIFY.notify_waiters();
+                        }
+                    }
+                }
+            }
+            return; // Early return after handling market_trades
+        }
+    }
 
     if let Some(msg_type) = value.get("type").and_then(Value::as_str) {
         if count % 50 == 0 || msg_type != "ticker" && msg_type != "l2update" {
@@ -374,9 +456,11 @@ fn process_coinbase_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_
                     trades.push(trade.clone());
                 }
 
-                if let Some(sender) = crate::core::get_multi_port_sender() {
-                    let _ = sender.send_trade_data(trade.clone());
-                    if count % 100 == 0 {
+                if let Some(sender) = &multi_port_sender {
+                    if let Err(e) = sender.send_trade_data(trade.clone()) {
+                        error!("Coinbase: Failed to send trade UDP: {}", e);
+                    }
+                    if count % 1000 == 0 {
                         debug!("Coinbase: Sent UDP packet for {} trade at price {}", trade.symbol, trade.price);
                     }
                 }
@@ -443,9 +527,11 @@ fn process_coinbase_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_
                     orderbooks.insert(common_symbol, orderbook.clone());
                 }
 
-                if let Some(sender) = crate::core::get_multi_port_sender() {
-                    let _ = sender.send_orderbook_data(orderbook.clone());
-                    if count % 100 == 0 {
+                if let Some(sender) = &multi_port_sender {
+                    if let Err(e) = sender.send_orderbook_data(orderbook.clone()) {
+                        error!("Coinbase: Failed to send orderbook UDP: {}", e);
+                    }
+                    if count % 1000 == 0 {
                         debug!("Coinbase: Sent UDP packet for {} orderbook with {} bids, {} asks",
                             orderbook.symbol, orderbook.bids.len(), orderbook.asks.len());
                     }
@@ -518,9 +604,11 @@ fn process_coinbase_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_
                         }
                     }
 
-                    if let Some(sender) = crate::core::get_multi_port_sender() {
-                        let _ = sender.send_orderbook_data(orderbook.clone());
-                        if count % 100 == 0 {
+                    if let Some(sender) = &multi_port_sender {
+                        if let Err(e) = sender.send_orderbook_data(orderbook.clone()) {
+                            error!("Coinbase: Failed to send orderbook update UDP: {}", e);
+                        }
+                        if count % 1000 == 0 {
                             debug!("Coinbase: Sent UDP packet for {} orderbook update with {} bids, {} asks",
                                 orderbook.symbol, orderbook.bids.len(), orderbook.asks.len());
                         }

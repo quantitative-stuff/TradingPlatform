@@ -8,7 +8,8 @@
       "Bash(do)",
       "Bash(echo:*)",
       "Bash(cargo check:*)",
-      "Read(//d/Works/Github/TradingPlatform/logs/**)"
+      "Read(//d/Works/Github/TradingPlatform/logs/**)",
+      "Bash(./target/release/feeder_direct.exe)"
     ],
     "deny": [],
     "ask": []
