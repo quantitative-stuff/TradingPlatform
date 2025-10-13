@@ -333,8 +333,8 @@ fn process_coinbase_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_
     }
 
     // Only log truly unusual messages (not market data)
-    if !text.contains("ticker") && !text.contains("l2update") && !text.contains("snapshot") && !text.contains("market_trades")
-        && !text.contains("subscriptions") && !text.contains("heartbeat") {
+    if !text.contains("ticker") && !text.contains("update") && !text.contains("snapshot") && !text.contains("market_trades")
+        && !text.contains("subscriptions") && !text.contains("heartbeat") && !text.contains("l2_data") {
         debug!("Coinbase non-standard message type: {}",
             text.get(0..100).unwrap_or(text));
     }
@@ -423,8 +423,162 @@ fn process_coinbase_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_
         }
     }
 
+    // Check for l2_data channel messages (Advanced Trade API format for level2)
+    if let Some(channel) = value.get("channel").and_then(Value::as_str) {
+        if channel == "l2_data" {
+            if let Some(events) = value.get("events").and_then(Value::as_array) {
+                for event in events {
+                    let msg_type = event.get("type").and_then(Value::as_str).unwrap_or("");
+                    let product_id = event.get("product_id").and_then(Value::as_str).unwrap_or("");
+
+                    // Map to common symbol
+                    let common_symbol = match symbol_mapper.map("Coinbase", product_id) {
+                        Some(symbol) => symbol,
+                        None => product_id.to_string()
+                    };
+
+                    match msg_type {
+                        "snapshot" => {
+                            // Process snapshot
+                            if count % 100 == 0 || count < 10 {
+                                info!("Coinbase: Received l2_data snapshot for {}", product_id);
+                            }
+
+                            let price_precision = config.feed_config.get_price_precision(&common_symbol);
+                            let qty_precision = config.feed_config.get_quantity_precision(&common_symbol);
+
+                            let mut bids: Vec<(i64, i64)> = Vec::new();
+                            let mut asks: Vec<(i64, i64)> = Vec::new();
+
+                            if let Some(updates) = event.get("updates").and_then(Value::as_array) {
+                                for update in updates {
+                                    let side = update.get("side").and_then(Value::as_str).unwrap_or("");
+                                    let price_str = update.get("price_level").and_then(Value::as_str).unwrap_or("0");
+                                    let qty_str = update.get("new_quantity").and_then(Value::as_str).unwrap_or("0");
+
+                                    let price = parse_to_scaled_or_default(price_str, price_precision);
+                                    let qty = parse_to_scaled_or_default(qty_str, qty_precision);
+
+                                    if side == "bid" {
+                                        bids.push((price, qty));
+                                    } else if side == "ask" {
+                                        asks.push((price, qty));
+                                    }
+                                }
+                            }
+
+                            bids.sort_by(|a, b| b.0.cmp(&a.0)); // Sort bids descending
+                            asks.sort_by(|a, b| a.0.cmp(&b.0)); // Sort asks ascending
+
+                            let orderbook = crate::core::OrderBookData {
+                                exchange: "Coinbase".to_string(),
+                                symbol: common_symbol.clone(),
+                                asset_type: asset_type.to_string(),
+                                bids,
+                                asks,
+                                price_precision,
+                                quantity_precision: qty_precision,
+                                timestamp: 0,
+                                timestamp_unit: config.feed_config.timestamp_unit,
+                            };
+
+                            {
+                                let mut orderbooks = orderbooks.write();
+                                orderbooks.insert(common_symbol.clone(), orderbook.clone());
+                            }
+
+                            if let Some(sender) = &multi_port_sender {
+                                info!("Coinbase: Sending l2_data snapshot for {} - {} bids, {} asks",
+                                    orderbook.symbol, orderbook.bids.len(), orderbook.asks.len());
+
+                                if let Err(e) = sender.send_orderbook_data(orderbook.clone()) {
+                                    error!("Coinbase: Failed to send l2_data snapshot UDP: {}", e);
+                                }
+                            }
+                        }
+                        "update" => {
+                            // Process update
+                            if count % 1000 == 0 || count < 10 {
+                                info!("Coinbase: Received l2_data update for {}", product_id);
+                            }
+
+                            let price_precision = config.feed_config.get_price_precision(&common_symbol);
+                            let qty_precision = config.feed_config.get_quantity_precision(&common_symbol);
+
+                            let mut orderbooks = orderbooks.write();
+                            let orderbook = orderbooks.entry(common_symbol.clone()).or_insert_with(|| {
+                                info!("Coinbase: Creating new orderbook for {} from l2_data update", common_symbol);
+                                crate::core::OrderBookData {
+                                    exchange: "Coinbase".to_string(),
+                                    symbol: common_symbol.clone(),
+                                    asset_type: asset_type.to_string(),
+                                    bids: Vec::new(),
+                                    asks: Vec::new(),
+                                    price_precision,
+                                    quantity_precision: qty_precision,
+                                    timestamp: 0,
+                                    timestamp_unit: config.feed_config.timestamp_unit,
+                                }
+                            });
+
+                            if let Some(updates) = event.get("updates").and_then(Value::as_array) {
+                                for update in updates {
+                                    let side = update.get("side").and_then(Value::as_str).unwrap_or("");
+                                    let price_str = update.get("price_level").and_then(Value::as_str).unwrap_or("0");
+                                    let qty_str = update.get("new_quantity").and_then(Value::as_str).unwrap_or("0");
+
+                                    let price = parse_to_scaled_or_default(price_str, price_precision);
+                                    let qty = parse_to_scaled_or_default(qty_str, qty_precision);
+
+                                    if side == "bid" {
+                                        let book_side = &mut orderbook.bids;
+                                        if qty == 0 {
+                                            book_side.retain(|(p, _)| *p != price);
+                                        } else {
+                                            if let Some(entry) = book_side.iter_mut().find(|(p, _)| *p == price) {
+                                                entry.1 = qty;
+                                            } else {
+                                                book_side.push((price, qty));
+                                            }
+                                        }
+                                        book_side.sort_by(|a, b| b.0.cmp(&a.0));
+                                    } else if side == "ask" {
+                                        let book_side = &mut orderbook.asks;
+                                        if qty == 0 {
+                                            book_side.retain(|(p, _)| *p != price);
+                                        } else {
+                                            if let Some(entry) = book_side.iter_mut().find(|(p, _)| *p == price) {
+                                                entry.1 = qty;
+                                            } else {
+                                                book_side.push((price, qty));
+                                            }
+                                        }
+                                        book_side.sort_by(|a, b| a.0.cmp(&b.0));
+                                    }
+                                }
+                            }
+
+                            if let Some(sender) = &multi_port_sender {
+                                if count < 10 || count % 1000 == 0 {
+                                    info!("Coinbase: Sending l2_data update for {} - {} bids, {} asks",
+                                        orderbook.symbol, orderbook.bids.len(), orderbook.asks.len());
+                                }
+
+                                if let Err(e) = sender.send_orderbook_data(orderbook.clone()) {
+                                    error!("Coinbase: Failed to send l2_data update UDP: {}", e);
+                                }
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            return; // Early return after handling l2_data
+        }
+    }
+
     if let Some(msg_type) = value.get("type").and_then(Value::as_str) {
-        if count % 50 == 0 || msg_type != "ticker" && msg_type != "l2update" {
+        if count % 50 == 0 || msg_type != "ticker" && msg_type != "l2update" && msg_type != "update" {
             // println!("Coinbase message type: {} (total: {})", msg_type, count);
         }
         match msg_type {
@@ -487,6 +641,12 @@ fn process_coinbase_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_
             }
             "snapshot" => {
                 let original_symbol = value.get("product_id").and_then(Value::as_str).unwrap_or_default();
+
+                // Log snapshot reception
+                if count % 100 == 0 || count < 10 {
+                    info!("Coinbase: Received snapshot for {}", original_symbol);
+                }
+
                 let common_symbol = match symbol_mapper.map("Coinbase", original_symbol) {
                     Some(symbol) => symbol,
                     None => {
@@ -546,6 +706,10 @@ fn process_coinbase_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_
                 }
 
                 if let Some(sender) = &multi_port_sender {
+                    // Always log for debugging
+                    info!("Coinbase: Sending orderbook snapshot for {} - {} bids, {} asks",
+                        orderbook.symbol, orderbook.bids.len(), orderbook.asks.len());
+
                     if let Err(e) = sender.send_orderbook_data(orderbook.clone()) {
                         error!("Coinbase: Failed to send orderbook snapshot UDP: {}", e);
                     } else if count % 5000 == 0 {
@@ -559,7 +723,21 @@ fn process_coinbase_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_
                 crate::core::COMPARE_NOTIFY.notify_waiters();
             }
             "l2update" => {
+                // Note: Advanced Trade API doesn't send l2update, it sends "update" in l2_data channel
+                // This is kept for compatibility with Exchange API (legacy Coinbase Pro)
                 let original_symbol = value.get("product_id").and_then(Value::as_str).unwrap_or_default();
+
+                // Log l2update reception periodically
+                if count % 1000 == 0 || count < 10 {
+                    info!("Coinbase: Received l2update for {}", original_symbol);
+                }
+
+                // Extra debug for first few messages
+                if count < 20 {
+                    info!("Coinbase l2update #{} for {}, sender available: {}",
+                        count, original_symbol, multi_port_sender.is_some());
+                }
+
                 let common_symbol = match symbol_mapper.map("Coinbase", original_symbol) {
                     Some(symbol) => symbol,
                     None => {
@@ -573,7 +751,24 @@ fn process_coinbase_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_
                 let qty_precision = config.feed_config.get_quantity_precision(&common_symbol);
 
                 let mut orderbooks = orderbooks.write();
-                if let Some(orderbook) = orderbooks.get_mut(&common_symbol) {
+
+                // Get or create orderbook if it doesn't exist yet
+                let orderbook = orderbooks.entry(common_symbol.clone()).or_insert_with(|| {
+                    info!("Coinbase: Creating new orderbook for {} from l2update", common_symbol);
+                    crate::core::OrderBookData {
+                        exchange: "Coinbase".to_string(),
+                        symbol: common_symbol.clone(),
+                        asset_type: asset_type.to_string(),
+                        bids: Vec::new(),
+                        asks: Vec::new(),
+                        price_precision,
+                        quantity_precision: qty_precision,
+                        timestamp: 0,
+                        timestamp_unit: config.feed_config.timestamp_unit,
+                    }
+                });
+
+                // Now update the orderbook
                     let timestamp = value.get("time")
                         .and_then(Value::as_str)
                         .and_then(|s| s.parse::<chrono::DateTime<chrono::Utc>>().ok())
@@ -624,6 +819,12 @@ fn process_coinbase_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_
                     }
 
                     if let Some(sender) = &multi_port_sender {
+                        // Log first few updates and periodic samples
+                        if count < 10 || count % 1000 == 0 {
+                            info!("Coinbase: Sending l2update for {} - {} bids, {} asks",
+                                orderbook.symbol, orderbook.bids.len(), orderbook.asks.len());
+                        }
+
                         if let Err(e) = sender.send_orderbook_data(orderbook.clone()) {
                             error!("Coinbase: Failed to send orderbook update UDP: {}", e);
                         } else if count % 5000 == 0 {
@@ -633,9 +834,8 @@ fn process_coinbase_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_
                     } else if count % 500 == 0 {
                         warn!("Coinbase: Multi-port sender not available for orderbook update data");
                     }
-                    
-                    crate::core::COMPARE_NOTIFY.notify_waiters();
-                }
+
+                crate::core::COMPARE_NOTIFY.notify_waiters();
             }
             "error" => {
                 let error_msg = value.get("message").and_then(Value::as_str).unwrap_or("Unknown error");
