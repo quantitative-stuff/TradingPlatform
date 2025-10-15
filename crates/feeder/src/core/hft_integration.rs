@@ -72,7 +72,11 @@ pub fn process_orderbook_update(update: OrderBookUpdate) {
             if !ring.push(fast_update) {
                 debug!("Ring buffer full for {:?}, dropping update", update.exchange);
             }
+        } else {
+            debug!("Failed to convert update for symbol: {} (not registered?)", update.symbol);
         }
+    } else {
+        warn!("HFT processor not initialized");
     }
 }
 
@@ -140,6 +144,12 @@ pub fn integrate_binance_orderbook(
         }
     }
 
+    // Skip empty updates
+    if bids.is_empty() && asks.is_empty() {
+        debug!("Skipping empty orderbook for {}", symbol);
+        return;
+    }
+
     // Create OrderBookUpdate
     let update = OrderBookUpdate {
         exchange: Exchange::Binance,
@@ -154,6 +164,19 @@ pub fn integrate_binance_orderbook(
         first_update_id,
         prev_update_id,
     };
+
+    // Log every 100th update for monitoring
+    static mut UPDATE_COUNT: u64 = 0;
+    unsafe {
+        UPDATE_COUNT += 1;
+        if UPDATE_COUNT % 100 == 0 {
+            info!("HFT Integration: Processing update #{} for {}: {} bids, {} asks, seq {}",
+                  UPDATE_COUNT, update.symbol, update.bids.len(), update.asks.len(), update_id);
+        }
+    }
+
+    debug!("Processing orderbook for {}: {} bids, {} asks, seq {}",
+           update.symbol, update.bids.len(), update.asks.len(), update_id);
 
     // Process with HFT processor
     process_orderbook_update(update);

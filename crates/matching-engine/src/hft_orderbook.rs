@@ -305,8 +305,8 @@ impl RingBuffer {
 
 /// Main HFT OrderBook Processor
 pub struct HFTOrderBookProcessor {
-    // All orderbooks in contiguous memory
-    orderbooks: Box<[FastOrderBook; MAX_SYMBOLS]>,
+    // All orderbooks in contiguous memory - shared between threads
+    orderbooks: Arc<parking_lot::RwLock<Box<[FastOrderBook; MAX_SYMBOLS]>>>,
 
     // Symbol name to ID mapping (built at startup)
     symbol_to_id: std::collections::HashMap<String, u16>,
@@ -337,7 +337,7 @@ impl HFTOrderBookProcessor {
             orderbooks.into_boxed_slice().try_into().unwrap();
 
         Self {
-            orderbooks,
+            orderbooks: Arc::new(parking_lot::RwLock::new(orderbooks)),
             symbol_to_id: std::collections::HashMap::new(),
             id_to_symbol: Vec::with_capacity(MAX_SYMBOLS),
             binance_ring: Arc::new(RingBuffer::new()),
@@ -418,6 +418,9 @@ impl HFTOrderBookProcessor {
         let bybit_ring = self.bybit_ring.clone();
         let okx_ring = self.okx_ring.clone();
 
+        // Clone the orderbooks Arc for the thread to use
+        let orderbooks = self.orderbooks.clone();
+
         // Create processing thread
         thread::spawn(move || {
             // Pin to CPU core 2 on Windows
@@ -425,12 +428,6 @@ impl HFTOrderBookProcessor {
             set_thread_affinity(2);
 
             info!("HFT OrderBook processor started");
-
-            // Pre-allocate orderbooks for fast access
-            let mut orderbooks = Vec::with_capacity(MAX_SYMBOLS);
-            for i in 0..MAX_SYMBOLS {
-                orderbooks.push(FastOrderBook::new(i as u16));
-            }
 
             let mut last_stats = Instant::now();
             let mut updates_since_stats = 0u64;
@@ -441,7 +438,9 @@ impl HFTOrderBookProcessor {
                 // Process Binance updates
                 while let Some(update) = binance_ring.pop() {
                     if (update.symbol_id as usize) < MAX_SYMBOLS {
-                        orderbooks[update.symbol_id as usize].apply_update(&update);
+                        // Get write lock and apply update
+                        let mut books = orderbooks.write();
+                        books[update.symbol_id as usize].apply_update(&update);
                         processed += 1;
                     }
                 }
@@ -449,7 +448,9 @@ impl HFTOrderBookProcessor {
                 // Process Bybit updates
                 while let Some(update) = bybit_ring.pop() {
                     if (update.symbol_id as usize) < MAX_SYMBOLS {
-                        orderbooks[update.symbol_id as usize].apply_update(&update);
+                        // Get write lock and apply update
+                        let mut books = orderbooks.write();
+                        books[update.symbol_id as usize].apply_update(&update);
                         processed += 1;
                     }
                 }
@@ -457,7 +458,9 @@ impl HFTOrderBookProcessor {
                 // Process OKX updates
                 while let Some(update) = okx_ring.pop() {
                     if (update.symbol_id as usize) < MAX_SYMBOLS {
-                        orderbooks[update.symbol_id as usize].apply_update(&update);
+                        // Get write lock and apply update
+                        let mut books = orderbooks.write();
+                        books[update.symbol_id as usize].apply_update(&update);
                         processed += 1;
                     }
                 }
@@ -485,7 +488,10 @@ impl HFTOrderBookProcessor {
     /// Get current orderbook for symbol
     pub fn get_orderbook(&self, symbol: &str) -> Option<FastOrderBookSnapshot> {
         let symbol_id = *self.symbol_to_id.get(symbol)?;
-        let book = &self.orderbooks[symbol_id as usize];
+
+        // Get read lock to access orderbooks
+        let books = self.orderbooks.read();
+        let book = &books[symbol_id as usize];
 
         Some(FastOrderBookSnapshot {
             symbol: symbol.to_string(),
