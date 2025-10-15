@@ -71,7 +71,11 @@ pub async fn spawn_binance_exchange(
             }
         }
 
-        config_for_binance.subscribe_data.codes = all_symbols;
+        config_for_binance.subscribe_data.codes = all_symbols.clone();
+
+        // Register symbols with HFT processor
+        crate::core::register_symbols("Binance", &all_symbols);
+
         let mut exchange = BinanceExchange::new(config_for_binance, symbol_mapper);
 
         loop {

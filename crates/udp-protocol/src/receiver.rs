@@ -226,6 +226,9 @@ impl UdpReceiver {
             bids,
             asks,
             is_snapshot,
+            update_id: 0, // Will be set by the feeder
+            first_update_id: 0, // Will be set by the feeder
+            prev_update_id: None, // Will be set by the feeder
         })
     }
 

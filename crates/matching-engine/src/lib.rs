@@ -5,6 +5,12 @@
 
 pub mod engine;
 pub mod types;
+pub mod orderbook_builder;
+pub mod checksum;
+pub mod persistence;
+pub mod windows_opt;
+pub mod monitoring;
+pub mod hft_orderbook;
 
 pub use engine::MatchingEngine;
 pub use types::*;

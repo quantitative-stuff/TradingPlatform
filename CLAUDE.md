@@ -172,3 +172,7 @@ cargo run --bin udp_monitor
 - Each exchange has unique parameters and limitations
 - UDP multicast allows multiple consumer processes
 - Database writes are separated from feed logic for reliability
+- no simplifed versions. only consider full implementation
+- never use synthetic data or fake data or man-made data ALWAYS use real data
+- do not try to go shortcut always stay in the core logic even if it gets complicated and takes more time
+- never use any shortcut or simplified version

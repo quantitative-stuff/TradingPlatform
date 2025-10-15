@@ -4,6 +4,7 @@ use futures_util::{SinkExt, StreamExt};
 use serde_json::Value;
 use tracing::{debug, info, warn, error};
 use super::websocket_config::connect_with_large_buffer;
+use super::binance_orderbook::{process_binance_orderbook, is_orderbook_message};
 use chrono;
 
 use crate::core::{
@@ -542,11 +543,14 @@ fn process_binance_message(
                     .unwrap_or("")
                     .to_string()
             };
-            
+
             if original_symbol.is_empty() {
                 debug!("Cannot determine symbol for Binance orderbook message - stream: {:?}", stream_name);
                 return;
             }
+
+            // Send to HFT OrderBook processor for ultra-fast local orderbook
+            crate::core::integrate_binance_orderbook(actual_data, &original_symbol, stream_name);
             
             let common_symbol = match symbol_mapper.map("Binance", &original_symbol) {
                 Some(symbol) => symbol,

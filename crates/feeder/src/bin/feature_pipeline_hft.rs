@@ -1,24 +1,29 @@
-/// Feature Pipeline Binary
+/// Enhanced Feature Pipeline with Local HFT OrderBook
 ///
-/// Receives market data from multicast UDP → Matching Engine → Feature Engineering
+/// Receives market data from multicast UDP → Maintains Local OrderBooks → Feature Engineering
+///
+/// This runs on a DIFFERENT MACHINE from the feeder, receiving data via network.
+/// It maintains its own local orderbooks using the same HFT technology for ultra-fast access.
 ///
 /// Data flow:
 ///   1. MultiPortUdpReceiver (20 parallel streams) receives binary packets
 ///   2. Parse binary packets to MarketTypes (OrderBookUpdate, Trade)
-///   3. Process through MatchingEngine (L2 → L3 events)
-///   4. Calculate features via FeaturePipeline
-///   5. Output features to console/file/database
+///   3. Maintain local HFT orderbooks (lock-free, pre-allocated)
+///   4. Process through MatchingEngine (L2 → L3 events)
+///   5. Calculate features via FeaturePipeline
+///   6. Output features for trading strategies
 ///
 /// Usage:
-///   cargo run --bin feature_pipeline --release
+///   cargo run --bin feature_pipeline_hft --release
 
 use feeder::core::multi_port_udp_receiver::{MultiPortUdpReceiver, DataType};
 use feeder::core::binary_udp_packet::{PacketHeader, OrderBookItem, TradeItem};
 use feature_engineering::pipeline::FeaturePipeline;
+use matching_engine::hft_orderbook::{HFTOrderBookProcessor, FastOrderBookSnapshot};
 use market_types::{OrderBookUpdate, Trade, PriceLevel, Exchange, Side};
 use tokio::signal;
 use tokio::sync::mpsc;
-use tracing::{info, error, warn};
+use tracing::{info, error, warn, debug};
 use std::sync::Arc;
 use std::collections::HashMap;
 use parking_lot::RwLock;
@@ -35,14 +40,32 @@ async fn main() -> anyhow::Result<()> {
         .init();
 
     info!("╔════════════════════════════════════════════════════════╗");
-    info!("║       Feature Pipeline - Real-time Processing         ║");
+    info!("║   Enhanced Feature Pipeline with HFT OrderBooks       ║");
     info!("╠════════════════════════════════════════════════════════╣");
-    info!("║  UDP Receiver → Matching Engine → Features            ║");
+    info!("║  UDP → Local HFT OrderBook → Matching → Features      ║");
+    info!("║                                                        ║");
+    info!("║  Features:                                             ║");
+    info!("║    • Lock-free local orderbooks                       ║");
+    info!("║    • Pre-allocated memory (2048 symbols)              ║");
+    info!("║    • Integer tick arithmetic                          ║");
+    info!("║    • Microsecond orderbook access                     ║");
     info!("║                                                        ║");
     info!("║  Receiving from 20 multicast streams:                 ║");
     info!("║    Binance, Bybit, OKX, Deribit, Upbit,              ║");
     info!("║    Coinbase, Bithumb                                   ║");
     info!("╚════════════════════════════════════════════════════════╝");
+
+    // Initialize LOCAL HFT OrderBook Processor (for receiver side)
+    let mut local_hft_processor = HFTOrderBookProcessor::new();
+    let local_hft = Arc::new(RwLock::new(local_hft_processor));
+    info!("✅ Local HFT OrderBook processor initialized");
+
+    // Start the HFT processor thread
+    {
+        let mut processor = local_hft.write();
+        processor.start_processing();
+    }
+    info!("✅ Local HFT OrderBook processor started");
 
     // Create feature pipeline (includes matching engine)
     let pipeline = Arc::new(FeaturePipeline::new(LOOKBACK_MS));
@@ -52,19 +75,54 @@ async fn main() -> anyhow::Result<()> {
     let (orderbook_tx, mut orderbook_rx) = mpsc::channel::<OrderBookUpdate>(10000);
     let (trade_tx, mut trade_rx) = mpsc::channel::<Trade>(10000);
 
-    // Spawn orderbook processing task
+    // Spawn orderbook processing task with HFT integration
     let pipeline_clone = pipeline.clone();
+    let local_hft_clone = local_hft.clone();
     tokio::spawn(async move {
         let mut feature_count = 0u64;
         let mut last_log_time = std::time::Instant::now();
+        let mut symbol_registered: HashMap<String, bool> = HashMap::new();
 
         while let Some(update) = orderbook_rx.recv().await {
+            // Register symbol in HFT processor if not already registered
+            if !symbol_registered.get(&update.symbol).unwrap_or(&false) {
+                let mut processor = local_hft_clone.write();
+                let tick_size = if update.symbol.contains("BTC") {
+                    0.01
+                } else if update.symbol.contains("SHIB") || update.symbol.contains("PEPE") {
+                    0.00000001
+                } else {
+                    0.0001
+                };
+                processor.register_symbol(&update.symbol, tick_size);
+                symbol_registered.insert(update.symbol.clone(), true);
+                debug!("Registered symbol {} in local HFT processor", update.symbol);
+            }
+
+            // Update local HFT orderbook
+            {
+                let processor = local_hft_clone.read();
+                if let Some(fast_update) = processor.convert_update(&update) {
+                    let ring = processor.get_ring_buffer(update.exchange);
+                    if !ring.push(fast_update) {
+                        debug!("Ring buffer full for {:?}, dropping update", update.exchange);
+                    }
+                }
+            }
+
+            // Process through feature pipeline
             match pipeline_clone.process_order_book_update(update.clone()) {
                 Ok(Some(features)) => {
                     feature_count += 1;
 
                     // Log every 10 seconds
                     if last_log_time.elapsed().as_secs() >= 10 {
+                        // Also get from local HFT orderbook for comparison
+                        let hft_snapshot = {
+                            let processor = local_hft_clone.read();
+                            processor.get_orderbook(&update.symbol)
+                        };
+
                         info!(
                             "[{}:{}] Features: OFI={:.4}, Spread={:.4}, WAP_0ms={:.2}",
                             features.exchange,
@@ -73,6 +131,16 @@ async fn main() -> anyhow::Result<()> {
                             features.spread.unwrap_or(0.0),
                             features.wap_0ms.unwrap_or(0.0),
                         );
+
+                        if let Some(snapshot) = hft_snapshot {
+                            info!(
+                                "  HFT OrderBook: {} bids, {} asks (seq: {})",
+                                snapshot.bids.len(),
+                                snapshot.asks.len(),
+                                snapshot.last_update_id
+                            );
+                        }
+
                         info!("Total features calculated: {}", feature_count);
                         last_log_time = std::time::Instant::now();
                     }
@@ -191,8 +259,36 @@ async fn main() -> anyhow::Result<()> {
     }).await?;
 
     info!("✅ Multi-Port Receiver started successfully");
+    info!("✅ Local HFT OrderBook maintaining all symbols");
     info!("✅ Feature pipeline processing started");
     info!("Listening on 20 multicast addresses...");
+
+    // Spawn a task to periodically show HFT orderbook stats
+    let local_hft_clone = local_hft.clone();
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(30));
+        loop {
+            interval.tick().await;
+            let processor = local_hft_clone.read();
+
+            // Get stats for a few key symbols
+            let symbols = ["BTCUSDT", "ETHUSDT", "BNBUSDT"];
+            for symbol in &symbols {
+                if let Some(snapshot) = processor.get_orderbook(symbol) {
+                    if !snapshot.bids.is_empty() && !snapshot.asks.is_empty() {
+                        let best_bid = snapshot.bids[0].price_ticks as f64 * snapshot.tick_size;
+                        let best_ask = snapshot.asks[0].price_ticks as f64 * snapshot.tick_size;
+                        info!(
+                            "HFT {}: Bid {:.2} Ask {:.2} Spread {:.4} ({}x{})",
+                            symbol, best_bid, best_ask, best_ask - best_bid,
+                            snapshot.bids.len(), snapshot.asks.len()
+                        );
+                    }
+                }
+            }
+        }
+    });
+
     info!("Press Ctrl+C to stop");
 
     // Wait for Ctrl+C
@@ -206,9 +302,11 @@ async fn main() -> anyhow::Result<()> {
     receiver.print_stats();
     receiver.abort_all();
 
-    info!("Feature pipeline stopped");
+    info!("Enhanced feature pipeline stopped");
     Ok(())
 }
+
+// ===== Helper functions (same as original feature_pipeline.rs) =====
 
 /// Parse packet header from raw bytes
 fn parse_packet_header(data: &[u8]) -> PacketHeader {

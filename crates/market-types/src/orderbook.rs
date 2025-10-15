@@ -15,6 +15,27 @@ pub struct OrderBookUpdate {
     pub bids: Vec<PriceLevel>,
     pub asks: Vec<PriceLevel>,
     pub is_snapshot: bool,
+
+    // Sequence tracking for gap detection
+    pub update_id: u64,        // Current update sequence number
+    pub first_update_id: u64,  // First update ID in this message (for snapshot ranges)
+    pub prev_update_id: Option<u64>, // Previous update ID (for continuity check)
+}
+
+impl Default for OrderBookUpdate {
+    fn default() -> Self {
+        Self {
+            exchange: Exchange::Binance, // Use a real exchange as default
+            symbol: String::new(),  // Symbol is just String type
+            timestamp: 0,
+            bids: Vec::new(),
+            asks: Vec::new(),
+            is_snapshot: false,
+            update_id: 0,
+            first_update_id: 0,
+            prev_update_id: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -24,6 +45,11 @@ pub struct OrderBook {
     pub timestamp: Timestamp,
     pub bids: Vec<PriceLevel>,
     pub asks: Vec<PriceLevel>,
+
+    // Sequence tracking for maintaining consistency
+    pub last_update_id: u64,    // Last applied update sequence number
+    pub first_update_id: u64,   // First update ID (for snapshot ranges)
+    pub update_count: u64,      // Total updates applied
 }
 
 impl OrderBook {
@@ -34,6 +60,9 @@ impl OrderBook {
             timestamp: 0,
             bids: Vec::new(),
             asks: Vec::new(),
+            last_update_id: 0,
+            first_update_id: 0,
+            update_count: 0,
         }
     }
 

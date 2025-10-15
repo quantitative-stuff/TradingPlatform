@@ -8,6 +8,7 @@ pub mod coinbase;
 pub mod okx;
 pub mod deribit;
 pub mod bithumb;
+pub mod binance_orderbook;
 
 pub use binance::BinanceExchange;
 pub use binance_rest::BinanceMarketDataProvider;

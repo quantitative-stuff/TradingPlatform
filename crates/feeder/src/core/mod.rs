@@ -219,4 +219,27 @@ pub use fast_json::{
     get_bool,
     get_array,
 };
-pub mod spawning; 
+pub mod spawning;
+pub mod orderbook_manager;
+pub mod hft_integration;
+
+pub use orderbook_manager::{
+    OrderBookManager,
+    init_orderbook_manager,
+    get_orderbook_manager,
+    BuiltOrderBook,
+    OrderBookSender,
+    UdpOrderBookSender,
+};
+
+pub use hft_integration::{
+    init_hft_processor,
+    start_hft_processor,
+    register_symbols,
+    process_orderbook_update,
+    get_orderbook_snapshot,
+    integrate_binance_orderbook,
+};
+
+// Re-export HFT types for receiver
+pub use matching_engine::hft_orderbook::FastOrderBookSnapshot; 

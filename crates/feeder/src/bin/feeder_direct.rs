@@ -68,6 +68,14 @@ async fn run_feeder_direct() -> Result<()> {
     }
     info!("✅ Multi-Port UDP sender initialized (20 addresses: Binance 40%, others 10% each)");
 
+    // Initialize HFT OrderBook Processor (lightweight, single-threaded)
+    feeder::core::init_hft_processor();
+    info!("✅ HFT OrderBook processor initialized");
+
+    // Start the HFT processor thread
+    feeder::core::start_hft_processor();
+    info!("✅ HFT OrderBook processor started (single thread, all symbols)");
+
     // Set up config directory for exchange configs
     // Config files are in workspace root at config/feeder/crypto/
     let config_dir = PathBuf::from("config")
