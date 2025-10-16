@@ -29,6 +29,32 @@ async fn run_feeder_direct() -> Result<()> {
         return Err(anyhow::anyhow!("Failed to initialize logging"));
     }
 
+    // Lock all memory into RAM (Linux only, prevents 5ms page fault spikes)
+    #[cfg(target_os = "linux")]
+    {
+        unsafe {
+            let result = libc::mlockall(libc::MCL_CURRENT | libc::MCL_FUTURE);
+            if result == 0 {
+                info!("✅ Memory locked into RAM (mlockall succeeded)");
+            } else {
+                let errno = *libc::__errno_location();
+                if errno == libc::EPERM {
+                    warn!("⚠️ mlockall failed: Permission denied. Run with sudo or add CAP_IPC_LOCK capability:");
+                    warn!("    sudo setcap cap_ipc_lock=+ep ./target/release/feeder_direct");
+                } else if errno == libc::ENOMEM {
+                    warn!("⚠️ mlockall failed: Not enough memory. Consider reducing symbol count.");
+                } else {
+                    warn!("⚠️ mlockall failed with errno: {}", errno);
+                }
+            }
+        }
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        info!("ℹ️ Memory locking skipped (only available on Linux, Windows detected)");
+    }
+
     // Check if we should use limited configs (default is full configs)
     let use_limited_config = std::env::var("USE_LIMITED_CONFIG").is_ok();
     if use_limited_config {
@@ -312,10 +338,24 @@ async fn run_feeder_direct() -> Result<()> {
 }
 
 
-#[tokio::main]
-async fn main() {
-    if let Err(e) = run_feeder_direct().await {
-        error!("Feeder direct failed: {}", e);
-        eprintln!("\n❌ CRITICAL ERROR: {}\nCheck logs for details.\n", e);
-    }
+fn main() {
+    // Build custom tokio runtime for HFT performance
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(4)  // 4 dedicated threads for async tasks
+        .thread_name("feeder-worker")
+        .thread_stack_size(3 * 1024 * 1024)  // 3MB stack (default is 2MB)
+        .event_interval(61)  // Prime number reduces aliasing with periodic tasks
+        .enable_all()  // Enable IO and time drivers
+        .build()
+        .expect("Failed to build tokio runtime");
+
+    println!("✅ Tokio runtime initialized: 4 workers, 3MB stack, event_interval=61");
+
+    // Run the feeder
+    runtime.block_on(async {
+        if let Err(e) = run_feeder_direct().await {
+            error!("Feeder direct failed: {}", e);
+            eprintln!("\n❌ CRITICAL ERROR: {}\nCheck logs for details.\n", e);
+        }
+    });
 }

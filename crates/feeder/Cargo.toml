@@ -72,3 +72,7 @@ kdb = "0.3.0"
 
 # Required for some modules
 lazy_static = "1.4"
+
+# Linux-only dependencies for HFT optimizations
+[target.'cfg(target_os = "linux")'.dependencies]
+libc = "0.2"

@@ -4,6 +4,27 @@ use crate::core::{TradeData, OrderBookData};
 /// Binary UDP packet format as specified in docs/api/udp_packet.md
 /// All multi-byte integers use network byte order (Big Endian)
 
+/// Branch prediction hints for hot paths
+#[inline(always)]
+#[cold]
+fn cold() {}
+
+#[inline(always)]
+fn likely(b: bool) -> bool {
+    if !b {
+        cold();
+    }
+    b
+}
+
+#[inline(always)]
+fn unlikely(b: bool) -> bool {
+    if b {
+        cold();
+    }
+    b
+}
+
 /// 58-byte packet header (fixed size, no sequence number for low latency)
 #[repr(C, packed)]
 #[derive(Debug, Copy, Clone)]
@@ -126,20 +147,21 @@ impl OrderBookItem {
     /// Converts from variable precision to fixed 10^8 precision
     pub fn new_from_scaled(price: i64, quantity: i64, price_precision: u8, qty_precision: u8) -> Self {
         // Convert from variable precision to fixed 10^8 precision
-        let price_scaled = if price_precision < 8 {
-            price * 10_i64.pow(8 - price_precision as u32)
-        } else if price_precision > 8 {
-            price / 10_i64.pow(price_precision as u32 - 8)
-        } else {
+        // Most common case: precision = 8 (no scaling needed)
+        let price_scaled = if likely(price_precision == 8) {
             price
+        } else if price_precision < 8 {
+            price * 10_i64.pow(8 - price_precision as u32)
+        } else {
+            price / 10_i64.pow(price_precision as u32 - 8)
         };
 
-        let quantity_scaled = if qty_precision < 8 {
-            quantity * 10_i64.pow(8 - qty_precision as u32)
-        } else if qty_precision > 8 {
-            quantity / 10_i64.pow(qty_precision as u32 - 8)
-        } else {
+        let quantity_scaled = if likely(qty_precision == 8) {
             quantity
+        } else if qty_precision < 8 {
+            quantity * 10_i64.pow(8 - qty_precision as u32)
+        } else {
+            quantity / 10_i64.pow(qty_precision as u32 - 8)
         };
 
         OrderBookItem {
@@ -184,20 +206,21 @@ impl TradeItem {
     /// Converts from variable precision to fixed 10^8 precision
     pub fn new_from_scaled(trade_id: u64, price: i64, quantity: i64, price_precision: u8, qty_precision: u8, is_buy: bool) -> Self {
         // Convert from variable precision to fixed 10^8 precision
-        let price_scaled = if price_precision < 8 {
-            price * 10_i64.pow(8 - price_precision as u32)
-        } else if price_precision > 8 {
-            price / 10_i64.pow(price_precision as u32 - 8)
-        } else {
+        // Most common case: precision = 8 (no scaling needed)
+        let price_scaled = if likely(price_precision == 8) {
             price
+        } else if price_precision < 8 {
+            price * 10_i64.pow(8 - price_precision as u32)
+        } else {
+            price / 10_i64.pow(price_precision as u32 - 8)
         };
 
-        let quantity_scaled = if qty_precision < 8 {
-            quantity * 10_i64.pow(8 - qty_precision as u32)
-        } else if qty_precision > 8 {
-            quantity / 10_i64.pow(qty_precision as u32 - 8)
-        } else {
+        let quantity_scaled = if likely(qty_precision == 8) {
             quantity
+        } else if qty_precision < 8 {
+            quantity * 10_i64.pow(8 - qty_precision as u32)
+        } else {
+            quantity / 10_i64.pow(qty_precision as u32 - 8)
         };
 
         TradeItem {

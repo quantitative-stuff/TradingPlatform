@@ -4,9 +4,12 @@ use market_types::{Trade, OrderBookUpdate};
 use anyhow::Result;
 use std::sync::Arc;
 use once_cell::sync::OnceCell;
+use socket2::{Socket, Domain, Type, Protocol};
+use std::net::SocketAddr;
 
 const MAX_UDP_PACKET_SIZE: usize = 65507; // Maximum UDP packet size (65535 - 20 IP header - 8 UDP header)
 const CHUNK_SIZE: usize = 60000; // Safe chunk size to avoid fragmentation
+const SOCKET_BUFFER_SIZE: usize = 4 * 1024 * 1024; // 4MB buffers for high throughput
 
 pub struct UdpSender {
     socket: Arc<UdpSocket>,
@@ -22,9 +25,26 @@ impl UdpSender {
         } else {
             bind_addr
         };
-        
-        let socket = UdpSocket::bind(actual_bind_addr).await?;
-        println!("UDP Sender bound to: {}", actual_bind_addr);
+
+        // Create socket2 socket for buffer tuning
+        let socket2 = Socket::new(Domain::IPV4, Type::DGRAM, Some(Protocol::UDP))?;
+
+        // Set socket buffer sizes to 4MB (prevents packet drops under load)
+        socket2.set_send_buffer_size(SOCKET_BUFFER_SIZE)?;
+        socket2.set_recv_buffer_size(SOCKET_BUFFER_SIZE)?;
+
+        // Set socket as non-blocking for tokio
+        socket2.set_nonblocking(true)?;
+
+        // Bind the socket
+        let addr: SocketAddr = actual_bind_addr.parse()?;
+        socket2.bind(&addr.into())?;
+
+        // Convert to tokio UdpSocket
+        let std_socket: std::net::UdpSocket = socket2.into();
+        let socket = UdpSocket::from_std(std_socket)?;
+
+        println!("UDP Sender bound to: {} (buffers: 4MB send/recv)", actual_bind_addr);
         println!("UDP Target address: {}", target_addr);
         
         // Parse the target address to check if it's multicast

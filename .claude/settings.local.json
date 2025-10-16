@@ -16,7 +16,12 @@
       "Bash(while read file)",
       "Bash(do echo \"Fixing: $file\")",
       "Bash(cargo test:*)",
-      "Bash(RUST_LOG=debug USE_LIMITED_CONFIG=1 timeout 15 ./target/debug/feeder_direct.exe)"
+      "Bash(RUST_LOG=debug USE_LIMITED_CONFIG=1 timeout 15 ./target/debug/feeder_direct.exe)",
+      "WebFetch(domain:developers.binance.com)",
+      "WebFetch(domain:bybit-exchange.github.io)",
+      "WebFetch(domain:docs.cdp.coinbase.com)",
+      "WebFetch(domain:docs.deribit.com)",
+      "WebFetch(domain:github.com)"
     ],
     "deny": [],
     "ask": []
