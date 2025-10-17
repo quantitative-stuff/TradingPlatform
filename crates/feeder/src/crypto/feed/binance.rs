@@ -5,7 +5,9 @@ use serde_json::Value;
 use tracing::{debug, info, warn, error};
 use super::websocket_config::connect_with_large_buffer;
 use super::binance_orderbook::{process_binance_orderbook, is_orderbook_message};
+use super::binance_snapshot::{BinanceOrderbookSynchronizer, BufferedDepthEvent};
 use chrono;
+use tokio::sync::RwLock;
 
 use crate::core::{
     Feeder, TRADES, ORDERBOOKS, COMPARE_NOTIFY, TradeData, OrderBookData,
@@ -38,6 +40,10 @@ pub struct BinanceExchange {
 
     // NEW: Multi-port UDP sender (optional)
     multi_port_sender: Option<Arc<MultiPortUdpSender>>,
+
+    // NEW: Orderbook synchronizers (symbol -> synchronizer)
+    // Each symbol needs its own synchronizer to handle REST snapshot + WebSocket sync
+    orderbook_synchronizers: Arc<RwLock<HashMap<String, Arc<BinanceOrderbookSynchronizer>>>>,
 }
 
 impl BinanceExchange {
@@ -81,12 +87,100 @@ impl BinanceExchange {
         // Multi-port sender will be initialized in ensure_sender()
         let multi_port_sender = None;
 
+        // Initialize empty synchronizers map (will be populated after connection)
+        let orderbook_synchronizers = Arc::new(RwLock::new(HashMap::new()));
+
         Self {
             config,
             symbol_mapper,
             ws_streams,
             active_connections: Arc::new(AtomicUsize::new(0)),
             multi_port_sender,
+            orderbook_synchronizers,
+        }
+    }
+
+    /// Initialize orderbook synchronizers for all symbols and fetch REST snapshots
+    async fn initialize_orderbook_synchronizers(&mut self) -> Result<()> {
+        info!("Binance: Initializing orderbook synchronizers and fetching REST snapshots...");
+
+        let mut all_symbols = Vec::new();
+
+        // Collect all symbols from all asset types
+        for asset_type in &self.config.feed_config.asset_type {
+            let symbols = if asset_type == "spot" {
+                &self.config.subscribe_data.spot_symbols
+            } else {
+                &self.config.subscribe_data.futures_symbols
+            };
+
+            for symbol in symbols {
+                all_symbols.push((symbol.clone(), asset_type.clone()));
+            }
+        }
+
+        info!("Binance: Creating synchronizers for {} symbols", all_symbols.len());
+
+        // Create synchronizers for each symbol
+        let mut sync_tasks = Vec::new();
+        let synchronizers = self.orderbook_synchronizers.clone();
+
+        for (symbol, asset_type) in all_symbols {
+            let synchronizer = Arc::new(BinanceOrderbookSynchronizer::new(
+                symbol.clone(),
+                asset_type.clone(),
+            ));
+
+            // Store synchronizer
+            {
+                let mut sync_map = synchronizers.write().await;
+                sync_map.insert(symbol.clone(), synchronizer.clone());
+            }
+
+            // Spawn task to fetch snapshot
+            let sync_clone = synchronizer.clone();
+            let symbol_clone = symbol.clone();
+            sync_tasks.push(tokio::spawn(async move {
+                match sync_clone.fetch_snapshot().await {
+                    Ok(_) => {
+                        info!("✅ Binance: Snapshot fetched for {}", symbol_clone);
+                        Ok(())
+                    }
+                    Err(e) => {
+                        error!("❌ Binance: Failed to fetch snapshot for {}: {}", symbol_clone, e);
+                        Err(e)
+                    }
+                }
+            }));
+        }
+
+        // Wait for all snapshots to be fetched (with timeout)
+        let timeout_duration = Duration::from_secs(30);
+        match tokio::time::timeout(timeout_duration, futures::future::join_all(sync_tasks)).await {
+            Ok(results) => {
+                let mut success_count = 0;
+                let mut failure_count = 0;
+
+                for result in results {
+                    match result {
+                        Ok(Ok(())) => success_count += 1,
+                        Ok(Err(_)) | Err(_) => failure_count += 1,
+                    }
+                }
+
+                info!("Binance: Snapshot initialization complete: {} succeeded, {} failed",
+                    success_count, failure_count);
+
+                if failure_count > 0 {
+                    warn!("⚠️ Binance: Some snapshots failed to fetch. Orderbook sync may not work for those symbols.");
+                }
+
+                Ok(())
+            }
+            Err(_) => {
+                error!("❌ Binance: Snapshot fetching timed out after 30 seconds");
+                Err(Error::Connection("Snapshot fetch timeout".to_string()))
+            }
         }
     }
 
@@ -234,6 +328,10 @@ impl Feeder for BinanceExchange {
         // When using combined streams endpoint, we don't need to send subscription messages
         // The streams are already specified in the connection URL
         debug!("Using combined streams - no subscription message needed");
+
+        // Initialize orderbook synchronizers and fetch REST snapshots
+        self.initialize_orderbook_synchronizers().await?;
+
         Ok(())
     }
 
@@ -253,6 +351,7 @@ impl Feeder for BinanceExchange {
                 let active_connections = self.active_connections.clone();
                 let multi_port_sender = self.multi_port_sender.clone();
                 let config = self.config.clone();
+                let synchronizers = self.orderbook_synchronizers.clone();
 
                 // Increment active connection count
                 active_connections.fetch_add(1, Ordering::SeqCst);
@@ -308,7 +407,7 @@ impl Feeder for BinanceExchange {
                                             debug!("Binance depth message preview: {}", 
                                                 if text.len() > 200 { &text[..200] } else { &text });
                                         }
-                                        process_binance_message(&text, symbol_mapper.clone(), &asset_type, multi_port_sender.clone(), &config);
+                                        process_binance_message(&text, symbol_mapper.clone(), &asset_type, multi_port_sender.clone(), &config, synchronizers.clone()).await;
                                     },
                                     Some(Ok(Message::Ping(ping))) => {
                                         if let Err(e) = ws_stream.send(Message::Pong(ping)).await {
@@ -377,12 +476,13 @@ impl Feeder for BinanceExchange {
     }
 }
 
-fn process_binance_message(
+async fn process_binance_message(
     text: &str,
     symbol_mapper: Arc<SymbolMapper>,
     asset_type: &str,
     multi_port_sender: Option<Arc<MultiPortUdpSender>>,
     config: &ExchangeConfig,
+    synchronizers: Arc<RwLock<HashMap<String, Arc<BinanceOrderbookSynchronizer>>>>,
 ) {
     let value: Value = match serde_json::from_str(text) {
         Ok(v) => v,
@@ -530,14 +630,11 @@ fn process_binance_message(
             COMPARE_NOTIFY.notify_waiters();
         },
         "orderbook" => {
-            debug!("Processing Binance orderbook from stream: {}", stream_name);
-            // For orderbook/depth streams, symbol is not in the data but in the stream name
-            // Stream name format: "btcusdt@depth20@100ms"
+            // NEW: Binance orderbook synchronization with REST snapshot
+            // Extract symbol from stream name (format: "btcusdt@depth20@100ms")
             let original_symbol = if !stream_name.is_empty() {
-                // Extract symbol from stream name (everything before the first @)
                 stream_name.split('@').next().unwrap_or("").to_uppercase()
             } else {
-                // Try to get from data if available (single stream format might have it)
                 actual_data.get("s")
                     .and_then(|v| v.as_str())
                     .unwrap_or("")
@@ -545,110 +642,183 @@ fn process_binance_message(
             };
 
             if original_symbol.is_empty() {
-                debug!("Cannot determine symbol for Binance orderbook message - stream: {:?}", stream_name);
+                debug!("Cannot determine symbol for Binance orderbook message");
                 return;
             }
 
-            // Send to HFT OrderBook processor for ultra-fast local orderbook
-            crate::core::integrate_binance_orderbook(actual_data, &original_symbol, stream_name);
-            
-            let common_symbol = match symbol_mapper.map("Binance", &original_symbol) {
-                Some(symbol) => symbol,
+            // Extract U/u/pu sequence fields
+            let final_update_id = actual_data.get("u")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
+            let first_update_id = actual_data.get("U")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(final_update_id);
+            let prev_update_id = actual_data.get("pu")
+                .and_then(|v| v.as_u64());
+
+            // Get synchronizer for this symbol
+            let sync_map = synchronizers.read().await;
+            let synchronizer = match sync_map.get(&original_symbol) {
+                Some(sync) => sync.clone(),
                 None => {
-                    // Log missing mapping with actual symbol name
-                    // Silent - this is expected for some symbols
+                    // No synchronizer = not subscribed to this symbol
+                    debug!("No synchronizer for Binance symbol {}", original_symbol);
                     return;
                 }
             };
+            drop(sync_map);
 
-            // println!("Binance: Receiving orderbook data for {}", common_symbol);
-
-            // Try both formats: "b"/"a" for full depth, "bids"/"asks" for partial depth
-            let bids = actual_data.get("b")
-                .or_else(|| actual_data.get("bids"))
-                .and_then(|v| v.as_array());
-            let asks = actual_data.get("a")
-                .or_else(|| actual_data.get("asks"))
-                .and_then(|v| v.as_array());
-                
-            if let Some(bids) = bids {
-                debug!("Processing Binance orderbook for {} ({}), asset_type: {}, bids: {}, asks: {}",
-                    original_symbol, common_symbol, asset_type,
-                    bids.len(),
-                    asks.map(|a| a.len()).unwrap_or(0));
-
-                // HFT: Get precision from config
-                let price_precision = config.feed_config.get_price_precision(&common_symbol);
-                let qty_precision = config.feed_config.get_quantity_precision(&common_symbol);
-
-                let orderbook = OrderBookData {
-                    exchange: "Binance".to_string(),
-                    symbol: common_symbol,  // Use mapped symbol
-                    asset_type: asset_type.to_string(),
-                    bids: bids.iter()
-                        .filter_map(|bid| {
-                            // HFT: Parse directly to scaled i64 (NO f64!)
-                            let price = parse_to_scaled_or_default(bid[0].as_str()?, price_precision);
-                            let qty = parse_to_scaled_or_default(bid[1].as_str()?, qty_precision);
-                            Some((price, qty))
-                        })
-                        .collect(),
-                    asks: asks
-                        .unwrap_or(&Vec::new())
-                        .iter()
-                        .filter_map(|ask| {
-                            // HFT: Parse directly to scaled i64 (NO f64!)
-                            let price = parse_to_scaled_or_default(ask[0].as_str()?, price_precision);
-                            let qty = parse_to_scaled_or_default(ask[1].as_str()?, qty_precision);
-                            Some((price, qty))
-                        })
-                        .collect(),
-                    price_precision,
-                    quantity_precision: qty_precision,
-                    timestamp: actual_data.get("E")  // Event time for full depth
-                        .and_then(|v| v.as_i64())
-                        .map(|t| t.max(0) as u64)
-                        .unwrap_or_else(|| {
-                            // Don't use lastUpdateId - it's a sequence number, not timestamp!
-                            // For partial book depth without timestamp, use current time
-                            chrono::Utc::now().timestamp_millis() as u64
-                        }),
-                    timestamp_unit: config.feed_config.timestamp_unit,
+            // Check if synchronization is needed
+            if synchronizer.needs_sync().await {
+                // Buffer this event
+                let event = BufferedDepthEvent {
+                    first_update_id,
+                    final_update_id,
+                    prev_update_id,
+                    data: actual_data.clone(),
                 };
+                synchronizer.buffer_event(event).await;
 
-                {
-                    let mut orderbooks = ORDERBOOKS.write();
-                    orderbooks.push(orderbook.clone());
-                }
+                // Try to synchronize
+                match synchronizer.synchronize().await {
+                    Ok(validated_events) => {
+                        info!("✅ Binance {} synchronized: {} buffered events ready",
+                            original_symbol, validated_events.len());
 
-                // Send UDP packet using multi-port sender if enabled, fallback to single-port
-                if USE_MULTI_PORT_UDP {
-                    if let Some(sender) = &multi_port_sender {
-                        let _ = sender.send_orderbook_data(orderbook.clone());
-                        // println!("Binance: Sent multi-port UDP for {} orderbook with {} bids, {} asks",
-                        //     orderbook.symbol, orderbook.bids.len(), orderbook.asks.len());
-                    } else {
-                        // Fallback to single-port
-                        if let Some(sender) = crate::core::get_binary_udp_sender() {
-                            let _ = sender.send_orderbook_data(orderbook.clone());
-                            // println!("Binance: Sent single-port UDP for {} orderbook with {} bids, {} asks",
-                            //     orderbook.symbol, orderbook.bids.len(), orderbook.asks.len());
+                        // Process all validated events
+                        for event_data in validated_events {
+                            process_binance_orderbook_data(
+                                &event_data,
+                                &original_symbol,
+                                &symbol_mapper,
+                                asset_type,
+                                &multi_port_sender,
+                                config,
+                            );
                         }
                     }
-                } else {
-                    // Use original single-port sender
-                    if let Some(sender) = crate::core::get_binary_udp_sender() {
-                        let _ = sender.send_orderbook_data(orderbook.clone());
-                        // println!("Binance: Sent UDP packet for {} orderbook with {} bids, {} asks",
-                        //     orderbook.symbol, orderbook.bids.len(), orderbook.asks.len());
+                    Err(e) => {
+                        // Synchronization failed - will retry on next message
+                        debug!("Binance {} sync pending: {}", original_symbol, e);
+                        return;
                     }
                 }
+            } else {
+                // Already synchronized - validate sequence
+                let event = BufferedDepthEvent {
+                    first_update_id,
+                    final_update_id,
+                    prev_update_id,
+                    data: actual_data.clone(),
+                };
 
-                COMPARE_NOTIFY.notify_waiters();
+                if synchronizer.validate_event(&event).await {
+                    // Sequence valid - process normally
+                    process_binance_orderbook_data(
+                        actual_data,
+                        &original_symbol,
+                        &symbol_mapper,
+                        asset_type,
+                        &multi_port_sender,
+                        config,
+                    );
+                } else {
+                    warn!("❌ Binance {} sequence gap detected - resyncing", original_symbol);
+                    // Buffer and resync
+                    synchronizer.buffer_event(event).await;
+                }
             }
         },
         _ => {
             debug!("Received unknown Binance stream type: {}", stream_type);
         }
+    }
+}
+
+/// Process Binance orderbook data (after synchronization)
+fn process_binance_orderbook_data(
+    actual_data: &Value,
+    original_symbol: &str,
+    symbol_mapper: &Arc<SymbolMapper>,
+    asset_type: &str,
+    multi_port_sender: &Option<Arc<MultiPortUdpSender>>,
+    config: &ExchangeConfig,
+) {
+    // Send to HFT OrderBook processor for ultra-fast local orderbook
+    crate::core::integrate_binance_orderbook(actual_data, original_symbol, "");
+
+    let common_symbol = match symbol_mapper.map("Binance", original_symbol) {
+        Some(symbol) => symbol,
+        None => {
+            // Symbol not mapped, skip silently
+            return;
+        }
+    };
+
+    // Try both formats: "b"/"a" for full depth, "bids"/"asks" for partial depth
+    let bids = actual_data.get("b")
+        .or_else(|| actual_data.get("bids"))
+        .and_then(|v| v.as_array());
+    let asks = actual_data.get("a")
+        .or_else(|| actual_data.get("asks"))
+        .and_then(|v| v.as_array());
+
+    if let Some(bids) = bids {
+        // HFT: Get precision from config
+        let price_precision = config.feed_config.get_price_precision(&common_symbol);
+        let qty_precision = config.feed_config.get_quantity_precision(&common_symbol);
+
+        let orderbook = OrderBookData {
+            exchange: "Binance".to_string(),
+            symbol: common_symbol.clone(),
+            asset_type: asset_type.to_string(),
+            bids: bids.iter()
+                .filter_map(|bid| {
+                    // HFT: Parse directly to scaled i64 (NO f64!)
+                    let price = parse_to_scaled_or_default(bid[0].as_str()?, price_precision);
+                    let qty = parse_to_scaled_or_default(bid[1].as_str()?, qty_precision);
+                    Some((price, qty))
+                })
+                .collect(),
+            asks: asks
+                .unwrap_or(&Vec::new())
+                .iter()
+                .filter_map(|ask| {
+                    // HFT: Parse directly to scaled i64 (NO f64!)
+                    let price = parse_to_scaled_or_default(ask[0].as_str()?, price_precision);
+                    let qty = parse_to_scaled_or_default(ask[1].as_str()?, qty_precision);
+                    Some((price, qty))
+                })
+                .collect(),
+            price_precision,
+            quantity_precision: qty_precision,
+            timestamp: actual_data.get("E")  // Event time
+                .and_then(|v| v.as_i64())
+                .map(|t| t.max(0) as u64)
+                .unwrap_or_else(|| chrono::Utc::now().timestamp_millis() as u64),
+            timestamp_unit: config.feed_config.timestamp_unit,
+        };
+
+        {
+            let mut orderbooks = ORDERBOOKS.write();
+            orderbooks.push(orderbook.clone());
+        }
+
+        // Send UDP packet
+        if USE_MULTI_PORT_UDP {
+            if let Some(sender) = multi_port_sender {
+                let _ = sender.send_orderbook_data(orderbook.clone());
+            } else {
+                if let Some(sender) = crate::core::get_binary_udp_sender() {
+                    let _ = sender.send_orderbook_data(orderbook.clone());
+                }
+            }
+        } else {
+            if let Some(sender) = crate::core::get_binary_udp_sender() {
+                let _ = sender.send_orderbook_data(orderbook.clone());
+            }
+        }
+
+        COMPARE_NOTIFY.notify_waiters();
     }
 }

@@ -9,6 +9,7 @@ pub mod okx;
 pub mod deribit;
 pub mod bithumb;
 pub mod binance_orderbook;
+pub mod binance_snapshot;
 
 pub use binance::BinanceExchange;
 pub use binance_rest::BinanceMarketDataProvider;
