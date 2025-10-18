@@ -28,6 +28,7 @@ pub struct OkxExchange {
     subscription_messages: HashMap<(String, String, usize), String>,
     // Track active connections for proper reconnection
     active_connections: Arc<AtomicUsize>,
+    // OKX only supports books5 (snapshot-only), no incremental orderbook management needed
 }
 
 impl OkxExchange {
@@ -479,10 +480,10 @@ fn process_okx_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_type:
                         }
                     }
                 },
-                "books5" | "books" | "books50-l2-tbt" => {
-                    // OKX sends orderbook updates in data array
+                "books5" => {
+                    // OKX books5 is snapshot-only (no incremental updates)
                     if let Some(books_array) = data.as_array() {
-                        debug!("OKX: Receiving orderbook data for {}", common_symbol);
+                        debug!("OKX: Receiving books5 snapshot for {}", common_symbol);
                         for book_data in books_array {
                             // HFT: Get precision BEFORE parsing orderbook
                             let price_precision = config.feed_config.get_price_precision(&common_symbol);
@@ -576,6 +577,10 @@ fn process_okx_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_type:
                             COMPARE_NOTIFY.notify_waiters();
                         }
                     }
+                },
+                "books" | "books-l2-tbt" | "books50-l2-tbt" => {
+                    warn!("[OKX] Incremental orderbook channel '{}' is not supported. Only 'books5' (snapshot-only) is supported.", channel);
+                    warn!("[OKX] Please update your configuration to use 'books5' channel only.");
                 },
                 _ => {
                     debug!("Unknown OKX channel: {}", channel);

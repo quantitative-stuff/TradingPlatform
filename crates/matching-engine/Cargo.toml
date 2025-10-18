@@ -5,6 +5,7 @@ edition.workspace = true
 
 [dependencies]
 market-types = { path = "../market-types" }
+udp-protocol = { path = "../udp-protocol" }
 anyhow = { workspace = true }
 dashmap = { workspace = true }
 parking_lot = { workspace = true }
@@ -17,6 +18,7 @@ md-5 = "0.10"
 serde_json = { workspace = true }
 rand = "0.8"
 reqwest = { version = "0.11", features = ["json", "rustls-tls"] }
+tracing-subscriber = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]
 winapi = { version = "0.3", features = ["processthreadsapi", "winnt", "fileapi"] }
@@ -29,3 +31,7 @@ tempfile = "3.8"
 tokio-tungstenite = { version = "0.20", features = ["rustls-tls-webpki-roots"] }
 futures-util = "0.3"
 tracing-subscriber = "0.3"
+
+[[bin]]
+name = "consumer"
+path = "src/bin/consumer.rs"

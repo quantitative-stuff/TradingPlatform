@@ -3,7 +3,9 @@ use async_trait::async_trait;
 use tokio_tungstenite::{WebSocketStream, MaybeTlsStream, tungstenite::protocol::Message};
 use futures_util::{SinkExt, StreamExt};
 use serde_json::{Value, json};
+use tokio::sync::mpsc;
 use super::websocket_config::connect_with_large_buffer;
+use super::coinbase_orderbook_builder::{spawn_orderbook_builder, CoinbaseOrderBookUpdate};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
@@ -11,7 +13,7 @@ use tracing::{debug, info, warn, error};
 use futures_util::future::FutureExt;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use crate::core::{OrderBookData, Feeder, SymbolMapper, CONNECTION_STATS, get_shutdown_receiver, parse_to_scaled_or_default, MultiPortUdpSender, get_multi_port_sender};
+use crate::core::{Feeder, SymbolMapper, CONNECTION_STATS, get_shutdown_receiver, parse_to_scaled_or_default, MultiPortUdpSender, get_multi_port_sender};
 use crate::error::Result;
 use crate::load_config::ExchangeConfig;
 
@@ -20,7 +22,8 @@ pub struct CoinbaseExchange {
     symbol_mapper: Arc<SymbolMapper>,
     ws_streams: HashMap<(String, String, usize), Option<WebSocketStream<MaybeTlsStream<tokio::net::TcpStream>>>>,
     active_connections: Arc<AtomicUsize>,
-    orderbooks: Arc<parking_lot::RwLock<HashMap<String, OrderBookData>>>,
+    // Per-symbol orderbook update channels (lock-free architecture)
+    orderbook_senders: Arc<HashMap<String, mpsc::Sender<CoinbaseOrderBookUpdate>>>,
     multi_port_sender: Option<Arc<MultiPortUdpSender>>,
 }
 
@@ -37,12 +40,35 @@ impl CoinbaseExchange {
     pub fn new(config: ExchangeConfig, symbol_mapper: Arc<SymbolMapper>) -> Self {
         const SYMBOLS_PER_CONNECTION: usize = 10;
         let mut ws_streams = HashMap::new();
+        let mut orderbook_senders = HashMap::new();
 
         let num_symbols = config.subscribe_data.spot_symbols.len();
         let num_chunks = (num_symbols + SYMBOLS_PER_CONNECTION - 1) / SYMBOLS_PER_CONNECTION;
 
         debug!("Coinbase constructor - {} symbols, {} per connection = {} connections per stream type",
             num_symbols, SYMBOLS_PER_CONNECTION, num_chunks);
+
+        info!("Coinbase: Spawning {} orderbook builder tasks (per-symbol architecture)", num_symbols);
+
+        // Spawn per-symbol orderbook builder task for each symbol
+        for asset_type in &config.feed_config.asset_type {
+            for symbol in &config.subscribe_data.spot_symbols {
+                // Map the symbol to common format for storage key
+                let common_symbol = match symbol_mapper.map("Coinbase", symbol) {
+                    Some(mapped) => mapped,
+                    None => symbol.clone(),
+                };
+
+                let sender = spawn_orderbook_builder(
+                    "Coinbase".to_string(),
+                    common_symbol.clone(),
+                    asset_type.clone(),
+                );
+
+                orderbook_senders.insert(common_symbol, sender);
+                debug!("Coinbase: Spawned orderbook builder task for {} ({})", symbol, asset_type);
+            }
+        }
 
         // Initialize separate connections for trade and orderbook streams
         for asset_type in &config.feed_config.asset_type {
@@ -61,7 +87,7 @@ impl CoinbaseExchange {
             symbol_mapper,
             ws_streams,
             active_connections: Arc::new(AtomicUsize::new(0)),
-            orderbooks: Arc::new(parking_lot::RwLock::new(HashMap::new())),
+            orderbook_senders: Arc::new(orderbook_senders),
             multi_port_sender: None, // Will be set in ensure_sender()
         }
     }
@@ -182,7 +208,7 @@ impl Feeder for CoinbaseExchange {
                 let chunk_idx = *chunk_idx;
                 let symbol_mapper = self.symbol_mapper.clone();
                 let active_connections = self.active_connections.clone();
-                let orderbooks = self.orderbooks.clone();
+                let orderbook_senders = self.orderbook_senders.clone();
                 let config = self.config.clone();
                 let multi_port_sender = self.multi_port_sender.clone();
 
@@ -233,7 +259,7 @@ impl Feeder for CoinbaseExchange {
                                 match msg {
                                     Some(Ok(Message::Text(text))) => {
                                         last_message_time = std::time::Instant::now();
-                                        process_coinbase_message(&text, symbol_mapper.clone(), &asset_type, orderbooks.clone(), &config, multi_port_sender.clone());
+                                        process_coinbase_message(&text, symbol_mapper.clone(), &asset_type, orderbook_senders.clone(), &config, multi_port_sender.clone());
                                     },
                                     Some(Ok(Message::Pong(_))) => {
                                         last_message_time = std::time::Instant::now();
@@ -319,7 +345,7 @@ impl Feeder for CoinbaseExchange {
     }
 }
 
-fn process_coinbase_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_type: &str, orderbooks: Arc<parking_lot::RwLock<HashMap<String, OrderBookData>>>, config: &ExchangeConfig, multi_port_sender: Option<Arc<MultiPortUdpSender>>) {
+fn process_coinbase_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_type: &str, orderbook_senders: Arc<HashMap<String, mpsc::Sender<CoinbaseOrderBookUpdate>>>, config: &ExchangeConfig, multi_port_sender: Option<Arc<MultiPortUdpSender>>) {
     use std::sync::atomic::{AtomicU64, Ordering};
     static MESSAGE_COUNT: AtomicU64 = AtomicU64::new(0);
 
@@ -467,33 +493,23 @@ fn process_coinbase_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_
                                 }
                             }
 
-                            bids.sort_by(|a, b| b.0.cmp(&a.0)); // Sort bids descending
-                            asks.sort_by(|a, b| a.0.cmp(&b.0)); // Sort asks ascending
-
-                            let orderbook = crate::core::OrderBookData {
-                                exchange: "Coinbase".to_string(),
-                                symbol: common_symbol.clone(),
-                                asset_type: asset_type.to_string(),
+                            // Send snapshot via channel to per-symbol task
+                            let update = CoinbaseOrderBookUpdate {
+                                message_type: "snapshot".to_string(),
                                 bids,
                                 asks,
+                                timestamp: 0,
                                 price_precision,
                                 quantity_precision: qty_precision,
-                                timestamp: 0,
                                 timestamp_unit: config.feed_config.timestamp_unit,
                             };
 
-                            {
-                                let mut orderbooks = orderbooks.write();
-                                orderbooks.insert(common_symbol.clone(), orderbook.clone());
-                            }
-
-                            if let Some(sender) = &multi_port_sender {
-                                info!("Coinbase: Sending l2_data snapshot for {} - {} bids, {} asks",
-                                    orderbook.symbol, orderbook.bids.len(), orderbook.asks.len());
-
-                                if let Err(e) = sender.send_orderbook_data(orderbook.clone()) {
-                                    error!("Coinbase: Failed to send l2_data snapshot UDP: {}", e);
+                            if let Some(sender) = orderbook_senders.get(&common_symbol) {
+                                if let Err(e) = sender.try_send(update) {
+                                    warn!("[Coinbase] [{}] Failed to send l2_data snapshot to channel: {:?}", common_symbol, e);
                                 }
+                            } else {
+                                warn!("[Coinbase] [{}] No orderbook sender found for l2_data snapshot", common_symbol);
                             }
                         }
                         "update" => {
@@ -505,21 +521,8 @@ fn process_coinbase_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_
                             let price_precision = config.feed_config.get_price_precision(&common_symbol);
                             let qty_precision = config.feed_config.get_quantity_precision(&common_symbol);
 
-                            let mut orderbooks = orderbooks.write();
-                            let orderbook = orderbooks.entry(common_symbol.clone()).or_insert_with(|| {
-                                info!("Coinbase: Creating new orderbook for {} from l2_data update", common_symbol);
-                                crate::core::OrderBookData {
-                                    exchange: "Coinbase".to_string(),
-                                    symbol: common_symbol.clone(),
-                                    asset_type: asset_type.to_string(),
-                                    bids: Vec::new(),
-                                    asks: Vec::new(),
-                                    price_precision,
-                                    quantity_precision: qty_precision,
-                                    timestamp: 0,
-                                    timestamp_unit: config.feed_config.timestamp_unit,
-                                }
-                            });
+                            let mut bids: Vec<(i64, i64)> = Vec::new();
+                            let mut asks: Vec<(i64, i64)> = Vec::new();
 
                             if let Some(updates) = event.get("updates").and_then(Value::as_array) {
                                 for update in updates {
@@ -531,42 +534,30 @@ fn process_coinbase_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_
                                     let qty = parse_to_scaled_or_default(qty_str, qty_precision);
 
                                     if side == "bid" {
-                                        let book_side = &mut orderbook.bids;
-                                        if qty == 0 {
-                                            book_side.retain(|(p, _)| *p != price);
-                                        } else {
-                                            if let Some(entry) = book_side.iter_mut().find(|(p, _)| *p == price) {
-                                                entry.1 = qty;
-                                            } else {
-                                                book_side.push((price, qty));
-                                            }
-                                        }
-                                        book_side.sort_by(|a, b| b.0.cmp(&a.0));
+                                        bids.push((price, qty));
                                     } else if side == "ask" {
-                                        let book_side = &mut orderbook.asks;
-                                        if qty == 0 {
-                                            book_side.retain(|(p, _)| *p != price);
-                                        } else {
-                                            if let Some(entry) = book_side.iter_mut().find(|(p, _)| *p == price) {
-                                                entry.1 = qty;
-                                            } else {
-                                                book_side.push((price, qty));
-                                            }
-                                        }
-                                        book_side.sort_by(|a, b| a.0.cmp(&b.0));
+                                        asks.push((price, qty));
                                     }
                                 }
                             }
 
-                            if let Some(sender) = &multi_port_sender {
-                                if count < 10 || count % 1000 == 0 {
-                                    info!("Coinbase: Sending l2_data update for {} - {} bids, {} asks",
-                                        orderbook.symbol, orderbook.bids.len(), orderbook.asks.len());
-                                }
+                            // Send update via channel to per-symbol task
+                            let update = CoinbaseOrderBookUpdate {
+                                message_type: "update".to_string(),
+                                bids,
+                                asks,
+                                timestamp: 0,
+                                price_precision,
+                                quantity_precision: qty_precision,
+                                timestamp_unit: config.feed_config.timestamp_unit,
+                            };
 
-                                if let Err(e) = sender.send_orderbook_data(orderbook.clone()) {
-                                    error!("Coinbase: Failed to send l2_data update UDP: {}", e);
+                            if let Some(sender) = orderbook_senders.get(&common_symbol) {
+                                if let Err(e) = sender.try_send(update) {
+                                    warn!("[Coinbase] [{}] Failed to send l2_data update to channel: {:?}", common_symbol, e);
                                 }
+                            } else {
+                                warn!("[Coinbase] [{}] No orderbook sender found for l2_data update", common_symbol);
                             }
                         }
                         _ => {}
@@ -649,10 +640,7 @@ fn process_coinbase_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_
 
                 let common_symbol = match symbol_mapper.map("Coinbase", original_symbol) {
                     Some(symbol) => symbol,
-                    None => {
-                        // Use original symbol if no mapping exists
-                        original_symbol.to_string()
-                    }
+                    None => original_symbol.to_string()
                 };
 
                 // HFT: Get precision BEFORE parsing orderbook
@@ -686,41 +674,24 @@ fn process_coinbase_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_
                     })
                     .unwrap_or_default();
 
-                let orderbook = crate::core::OrderBookData {
-                    exchange: "Coinbase".to_string(),
-                    symbol: common_symbol.clone(),
-                    asset_type: asset_type.to_string(),
-                    bids: bids.clone(),
-                    asks: asks.clone(),
+                // Send snapshot via channel to per-symbol task
+                let update = CoinbaseOrderBookUpdate {
+                    message_type: "snapshot".to_string(),
+                    bids,
+                    asks,
+                    timestamp: 0,
                     price_precision,
                     quantity_precision: qty_precision,
-                    timestamp: 0, // Coinbase snapshot does not provide a timestamp
                     timestamp_unit: config.feed_config.timestamp_unit,
                 };
 
-                // println!("ORDERBOOK {} ({}L)", common_symbol, bids.len() + asks.len());
-
-                {
-                    let mut orderbooks = orderbooks.write();
-                    orderbooks.insert(common_symbol, orderbook.clone());
-                }
-
-                if let Some(sender) = &multi_port_sender {
-                    // Always log for debugging
-                    info!("Coinbase: Sending orderbook snapshot for {} - {} bids, {} asks",
-                        orderbook.symbol, orderbook.bids.len(), orderbook.asks.len());
-
-                    if let Err(e) = sender.send_orderbook_data(orderbook.clone()) {
-                        error!("Coinbase: Failed to send orderbook snapshot UDP: {}", e);
-                    } else if count % 5000 == 0 {
-                        debug!("Coinbase: Successfully sending orderbook snapshots via UDP (sample: {} with {} bids, {} asks)",
-                            orderbook.symbol, orderbook.bids.len(), orderbook.asks.len());
+                if let Some(sender) = orderbook_senders.get(&common_symbol) {
+                    if let Err(e) = sender.try_send(update) {
+                        warn!("[Coinbase] [{}] Failed to send snapshot to channel: {:?}", common_symbol, e);
                     }
-                } else if count % 500 == 0 {
-                    warn!("Coinbase: Multi-port sender not available for orderbook snapshot data");
+                } else {
+                    warn!("[Coinbase] [{}] No orderbook sender found for snapshot", common_symbol);
                 }
-                
-                crate::core::COMPARE_NOTIFY.notify_waiters();
             }
             "l2update" => {
                 // Note: Advanced Trade API doesn't send l2update, it sends "update" in l2_data channel
@@ -732,110 +703,64 @@ fn process_coinbase_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_
                     info!("Coinbase: Received l2update for {}", original_symbol);
                 }
 
-                // Extra debug for first few messages
-                if count < 20 {
-                    info!("Coinbase l2update #{} for {}, sender available: {}",
-                        count, original_symbol, multi_port_sender.is_some());
-                }
-
                 let common_symbol = match symbol_mapper.map("Coinbase", original_symbol) {
                     Some(symbol) => symbol,
-                    None => {
-                        // Use original symbol if no mapping exists
-                        original_symbol.to_string()
-                    }
+                    None => original_symbol.to_string()
                 };
 
                 // HFT: Get precision for updates
                 let price_precision = config.feed_config.get_price_precision(&common_symbol);
                 let qty_precision = config.feed_config.get_quantity_precision(&common_symbol);
 
-                let mut orderbooks = orderbooks.write();
+                let timestamp = value.get("time")
+                    .and_then(Value::as_str)
+                    .and_then(|s| s.parse::<chrono::DateTime<chrono::Utc>>().ok())
+                    .map(|dt| dt.timestamp_millis().max(0) as u64)
+                    .unwrap_or_default();
 
-                // Get or create orderbook if it doesn't exist yet
-                let orderbook = orderbooks.entry(common_symbol.clone()).or_insert_with(|| {
-                    info!("Coinbase: Creating new orderbook for {} from l2update", common_symbol);
-                    crate::core::OrderBookData {
-                        exchange: "Coinbase".to_string(),
-                        symbol: common_symbol.clone(),
-                        asset_type: asset_type.to_string(),
-                        bids: Vec::new(),
-                        asks: Vec::new(),
-                        price_precision,
-                        quantity_precision: qty_precision,
-                        timestamp: 0,
-                        timestamp_unit: config.feed_config.timestamp_unit,
-                    }
-                });
+                let mut bids: Vec<(i64, i64)> = Vec::new();
+                let mut asks: Vec<(i64, i64)> = Vec::new();
 
-                // Now update the orderbook
-                    let timestamp = value.get("time")
-                        .and_then(Value::as_str)
-                        .and_then(|s| s.parse::<chrono::DateTime<chrono::Utc>>().ok())
-                        .map(|dt| dt.timestamp_millis().max(0) as u64)
-                        .unwrap_or_default();
-                    orderbook.timestamp = timestamp;
+                if let Some(changes) = value.get("changes").and_then(Value::as_array) {
+                    for change in changes {
+                        if let Some(change_arr) = change.as_array() {
+                            if change_arr.len() == 3 {
+                                let side = change_arr[0].as_str().unwrap_or_default();
+                                let price = change_arr[1].as_str()
+                                    .map(|s| parse_to_scaled_or_default(s, price_precision))
+                                    .unwrap_or(0);
+                                let quantity = change_arr[2].as_str()
+                                    .map(|s| parse_to_scaled_or_default(s, qty_precision))
+                                    .unwrap_or(0);
 
-                    if let Some(changes) = value.get("changes").and_then(Value::as_array) {
-                        for change in changes {
-                            if let Some(change_arr) = change.as_array() {
-                                if change_arr.len() == 3 {
-                                    let side = change_arr[0].as_str().unwrap_or_default();
-                                    let price = change_arr[1].as_str()
-                                        .map(|s| parse_to_scaled_or_default(s, price_precision))
-                                        .unwrap_or(0);
-                                    let quantity = change_arr[2].as_str()
-                                        .map(|s| parse_to_scaled_or_default(s, qty_precision))
-                                        .unwrap_or(0);
-
-                                    if side == "buy" {
-                                        let book_side = &mut orderbook.bids;
-                                        if quantity == 0 {
-                                            book_side.retain(|(p, _)| *p != price);
-                                        } else {
-                                            if let Some(entry) = book_side.iter_mut().find(|(p, _)| *p == price) {
-                                                entry.1 = quantity;
-                                            } else {
-                                                book_side.push((price, quantity));
-                                            }
-                                        }
-                                        book_side.sort_by(|a, b| b.0.cmp(&a.0));
-                                    } else {
-                                        let book_side = &mut orderbook.asks;
-                                        if quantity == 0 {
-                                            book_side.retain(|(p, _)| *p != price);
-                                        } else {
-                                            if let Some(entry) = book_side.iter_mut().find(|(p, _)| *p == price) {
-                                                entry.1 = quantity;
-                                            } else {
-                                                book_side.push((price, quantity));
-                                            }
-                                        }
-                                        book_side.sort_by(|a, b| a.0.cmp(&b.0));
-                                    }
+                                if side == "buy" {
+                                    bids.push((price, quantity));
+                                } else {
+                                    asks.push((price, quantity));
                                 }
                             }
                         }
                     }
+                }
 
-                    if let Some(sender) = &multi_port_sender {
-                        // Log first few updates and periodic samples
-                        if count < 10 || count % 1000 == 0 {
-                            info!("Coinbase: Sending l2update for {} - {} bids, {} asks",
-                                orderbook.symbol, orderbook.bids.len(), orderbook.asks.len());
-                        }
+                // Send update via channel to per-symbol task
+                let update = CoinbaseOrderBookUpdate {
+                    message_type: "update".to_string(),
+                    bids,
+                    asks,
+                    timestamp,
+                    price_precision,
+                    quantity_precision: qty_precision,
+                    timestamp_unit: config.feed_config.timestamp_unit,
+                };
 
-                        if let Err(e) = sender.send_orderbook_data(orderbook.clone()) {
-                            error!("Coinbase: Failed to send orderbook update UDP: {}", e);
-                        } else if count % 5000 == 0 {
-                            debug!("Coinbase: Successfully sending orderbook updates via UDP (sample: {} with {} bids, {} asks)",
-                                orderbook.symbol, orderbook.bids.len(), orderbook.asks.len());
-                        }
-                    } else if count % 500 == 0 {
-                        warn!("Coinbase: Multi-port sender not available for orderbook update data");
+                if let Some(sender) = orderbook_senders.get(&common_symbol) {
+                    if let Err(e) = sender.try_send(update) {
+                        warn!("[Coinbase] [{}] Failed to send l2update to channel: {:?}", common_symbol, e);
                     }
-
-                crate::core::COMPARE_NOTIFY.notify_waiters();
+                } else {
+                    warn!("[Coinbase] [{}] No orderbook sender found for l2update", common_symbol);
+                }
             }
             "error" => {
                 let error_msg = value.get("message").and_then(Value::as_str).unwrap_or("Unknown error");

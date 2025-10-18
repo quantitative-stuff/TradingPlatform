@@ -346,6 +346,10 @@ pub struct HFTOrderBookProcessor {
     binance_ring: Arc<RingBuffer>,
     bybit_ring: Arc<RingBuffer>,
     okx_ring: Arc<RingBuffer>,
+    coinbase_ring: Arc<RingBuffer>,
+    upbit_ring: Arc<RingBuffer>,
+    bithumb_ring: Arc<RingBuffer>,
+    deribit_ring: Arc<RingBuffer>,
 
     // Statistics
     total_updates: AtomicU64,
@@ -373,6 +377,10 @@ impl HFTOrderBookProcessor {
             binance_ring: Arc::new(RingBuffer::new()),
             bybit_ring: Arc::new(RingBuffer::new()),
             okx_ring: Arc::new(RingBuffer::new()),
+            coinbase_ring: Arc::new(RingBuffer::new()),
+            upbit_ring: Arc::new(RingBuffer::new()),
+            bithumb_ring: Arc::new(RingBuffer::new()),
+            deribit_ring: Arc::new(RingBuffer::new()),
             total_updates: AtomicU64::new(0),
             updates_per_second: AtomicU64::new(0),
             tick_sizes: vec![0.01; MAX_SYMBOLS], // Default tick size
@@ -438,7 +446,14 @@ impl HFTOrderBookProcessor {
             Exchange::Binance | Exchange::BinanceFutures => self.binance_ring.clone(),
             Exchange::Bybit => self.bybit_ring.clone(),
             Exchange::OKX => self.okx_ring.clone(),
-            _ => self.binance_ring.clone(), // Default to Binance
+            Exchange::Coinbase => self.coinbase_ring.clone(),
+            Exchange::Upbit => self.upbit_ring.clone(),
+            Exchange::Bithumb => self.bithumb_ring.clone(),
+            Exchange::Deribit => self.deribit_ring.clone(),
+            _ => {
+                warn!("Unknown exchange {:?}, using Binance ring buffer", exchange);
+                self.binance_ring.clone()
+            }
         }
     }
 
@@ -523,6 +538,10 @@ impl HFTOrderBookProcessor {
         let binance_ring = self.binance_ring.clone();
         let bybit_ring = self.bybit_ring.clone();
         let okx_ring = self.okx_ring.clone();
+        let coinbase_ring = self.coinbase_ring.clone();
+        let upbit_ring = self.upbit_ring.clone();
+        let bithumb_ring = self.bithumb_ring.clone();
+        let deribit_ring = self.deribit_ring.clone();
 
         // Clone the orderbooks Arc for the thread to use
         let orderbooks = self.orderbooks.clone();
@@ -546,14 +565,14 @@ impl HFTOrderBookProcessor {
             loop {
                 let mut processed = 0;
 
-                // Process Binance updates (batched)
+                // Process all exchange ring buffers (batched)
                 processed += Self::process_ring_batched(&binance_ring, &orderbooks, &mut batch);
-
-                // Process Bybit updates (batched)
                 processed += Self::process_ring_batched(&bybit_ring, &orderbooks, &mut batch);
-
-                // Process OKX updates (batched)
                 processed += Self::process_ring_batched(&okx_ring, &orderbooks, &mut batch);
+                processed += Self::process_ring_batched(&coinbase_ring, &orderbooks, &mut batch);
+                processed += Self::process_ring_batched(&upbit_ring, &orderbooks, &mut batch);
+                processed += Self::process_ring_batched(&bithumb_ring, &orderbooks, &mut batch);
+                processed += Self::process_ring_batched(&deribit_ring, &orderbooks, &mut batch);
 
                 if processed > 0 {
                     updates_since_stats += processed;

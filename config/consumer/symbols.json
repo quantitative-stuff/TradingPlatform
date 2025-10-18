@@ -1,0 +1,136 @@
+{
+  "comment": "Consumer symbol configuration - symbols to track in HFT orderbook processor",
+  "format": "Exchange:Symbol -> tick_size",
+
+  "udp_config": {
+    "port": 9001,
+    "buffer_size": 10000
+  },
+
+  "symbols": [
+    {
+      "exchange": "Binance",
+      "symbol": "BTC-USDT",
+      "tick_size": 0.01,
+      "enabled": true
+    },
+    {
+      "exchange": "Binance",
+      "symbol": "ETH-USDT",
+      "tick_size": 0.01,
+      "enabled": true
+    },
+    {
+      "exchange": "Binance",
+      "symbol": "SOL-USDT",
+      "tick_size": 0.001,
+      "enabled": true
+    },
+    {
+      "exchange": "Binance",
+      "symbol": "BNB-USDT",
+      "tick_size": 0.01,
+      "enabled": true
+    },
+    {
+      "exchange": "Binance",
+      "symbol": "XRP-USDT",
+      "tick_size": 0.0001,
+      "enabled": true
+    },
+    {
+      "exchange": "Bybit",
+      "symbol": "BTC-USDT",
+      "tick_size": 0.01,
+      "enabled": true
+    },
+    {
+      "exchange": "Bybit",
+      "symbol": "ETH-USDT",
+      "tick_size": 0.01,
+      "enabled": true
+    },
+    {
+      "exchange": "Bybit",
+      "symbol": "SOL-USDT",
+      "tick_size": 0.001,
+      "enabled": true
+    },
+    {
+      "exchange": "Coinbase",
+      "symbol": "BTC-USD",
+      "tick_size": 0.01,
+      "enabled": true
+    },
+    {
+      "exchange": "Coinbase",
+      "symbol": "ETH-USD",
+      "tick_size": 0.01,
+      "enabled": true
+    },
+    {
+      "exchange": "OKX",
+      "symbol": "BTC-USDT",
+      "tick_size": 0.1,
+      "enabled": true
+    },
+    {
+      "exchange": "OKX",
+      "symbol": "ETH-USDT",
+      "tick_size": 0.01,
+      "enabled": true
+    },
+    {
+      "exchange": "Deribit",
+      "symbol": "BTC-PERPETUAL",
+      "tick_size": 0.5,
+      "enabled": true,
+      "comment": "Deribit perpetual contracts"
+    },
+    {
+      "exchange": "Upbit",
+      "symbol": "BTC-KRW",
+      "tick_size": 1.0,
+      "enabled": true,
+      "comment": "Upbit KRW pairs have no decimal places for price"
+    },
+    {
+      "exchange": "Upbit",
+      "symbol": "ETH-KRW",
+      "tick_size": 1.0,
+      "enabled": true
+    },
+    {
+      "exchange": "Upbit",
+      "symbol": "XRP-KRW",
+      "tick_size": 1.0,
+      "enabled": true
+    },
+    {
+      "exchange": "Bithumb",
+      "symbol": "BTC-KRW",
+      "tick_size": 1.0,
+      "enabled": true,
+      "comment": "Bithumb KRW pairs"
+    },
+    {
+      "exchange": "Bithumb",
+      "symbol": "ETH-KRW",
+      "tick_size": 1.0,
+      "enabled": true
+    },
+    {
+      "exchange": "Bithumb",
+      "symbol": "XRP-KRW",
+      "tick_size": 1.0,
+      "enabled": true
+    }
+  ],
+
+  "processing_config": {
+    "cpu_core": 2,
+    "ring_buffer_size": 65536,
+    "batch_size": 16,
+    "max_symbols": 2048
+  }
+}

@@ -1,12 +1,15 @@
 pub mod upbit;
 pub mod binance;
 pub mod bybit;
+pub mod bybit_orderbook_builder;
+pub mod coinbase;
+pub mod coinbase_orderbook_builder;
+pub mod deribit;
+pub mod deribit_orderbook_builder;
 pub mod binance_rest;
 // pub mod metrics_integration; // Removed with Grafana/monitoring
 pub mod websocket_config;
-pub mod coinbase;
 pub mod okx;
-pub mod deribit;
 pub mod bithumb;
 pub mod binance_orderbook;
 pub mod binance_snapshot;

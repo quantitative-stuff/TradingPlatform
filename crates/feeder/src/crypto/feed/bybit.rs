@@ -2,7 +2,9 @@ use async_trait::async_trait;
 use tokio_tungstenite::{WebSocketStream, MaybeTlsStream, tungstenite::protocol::Message};
 use futures_util::{SinkExt, StreamExt};
 use serde_json::{Value, json};
+use tokio::sync::mpsc;
 use super::websocket_config::connect_with_large_buffer;
+use super::bybit_orderbook_builder::{spawn_orderbook_builder, BybitOrderBookUpdate};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
@@ -25,6 +27,8 @@ pub struct BybitExchange {
     ws_streams: HashMap<(String, String, usize), Option<WebSocketStream<MaybeTlsStream<tokio::net::TcpStream>>>>,
     // Track active connections for proper reconnection
     active_connections: Arc<AtomicUsize>,
+    // Per-symbol orderbook update channels (lock-free architecture)
+    orderbook_senders: Arc<HashMap<String, mpsc::Sender<BybitOrderBookUpdate>>>,
     multi_port_sender: Option<Arc<MultiPortUdpSender>>,
 }
 
@@ -32,8 +36,43 @@ impl BybitExchange {
     pub fn new(config: ExchangeConfig, symbol_mapper: Arc<SymbolMapper>) -> Self {
         const SYMBOLS_PER_CONNECTION: usize = 10;
         let mut ws_streams = HashMap::new();
+        let mut orderbook_senders = HashMap::new();
 
-        // Initialize separate connections for trade and orderbook streams
+        // Collect all symbols and spawn per-symbol orderbook builder tasks
+        let mut all_symbols = Vec::new();
+        for asset_type in &config.feed_config.asset_type {
+            let symbols = if asset_type == "spot" {
+                &config.subscribe_data.spot_symbols
+            } else {
+                &config.subscribe_data.futures_symbols
+            };
+
+            for symbol in symbols {
+                all_symbols.push((symbol.clone(), asset_type.clone()));
+            }
+        }
+
+        info!("Bybit: Spawning {} orderbook builder tasks (per-symbol architecture)", all_symbols.len());
+
+        // Spawn per-symbol orderbook builder task for each symbol
+        for (symbol, asset_type) in all_symbols {
+            // Map the symbol to common format for storage key
+            let common_symbol = match symbol_mapper.map("Bybit", &symbol) {
+                Some(mapped) => mapped,
+                None => symbol.clone(),
+            };
+
+            let sender = spawn_orderbook_builder(
+                "Bybit".to_string(),
+                common_symbol.clone(),
+                asset_type.clone(),
+            );
+
+            orderbook_senders.insert(common_symbol, sender);
+            debug!("Bybit: Spawned orderbook builder task for {} ({})", symbol, asset_type);
+        }
+
+        // Initialize separate WebSocket connections for trade and orderbook streams
         for asset_type in &config.feed_config.asset_type {
             let symbols = if asset_type == "spot" {
                 &config.subscribe_data.spot_symbols
@@ -63,6 +102,7 @@ impl BybitExchange {
             symbol_mapper,
             ws_streams,
             active_connections: Arc::new(AtomicUsize::new(0)),
+            orderbook_senders: Arc::new(orderbook_senders),
             multi_port_sender: None, // Will be set in ensure_sender()
         }
     }
@@ -258,6 +298,7 @@ impl Feeder for BybitExchange {
                 let active_connections = self.active_connections.clone();
                 let config = self.config.clone();
                 let multi_port_sender = self.multi_port_sender.clone();
+                let orderbook_senders = self.orderbook_senders.clone();
 
                 // Increment active connection count
                 active_connections.fetch_add(1, Ordering::SeqCst);
@@ -318,7 +359,7 @@ impl Feeder for BybitExchange {
                                 match msg {
                                     Some(Ok(Message::Text(text))) => {
                                         last_message_time = std::time::Instant::now(); // Update last message time
-                                        process_bybit_message(&text, symbol_mapper.clone(), &asset_type, &config, multi_port_sender.clone());
+                                        process_bybit_message(&text, symbol_mapper.clone(), &asset_type, &config, multi_port_sender.clone(), orderbook_senders.clone());
                                     },
                                     Some(Ok(Message::Pong(_))) => {
                                         last_message_time = std::time::Instant::now(); // Update last message time
@@ -419,7 +460,7 @@ impl Feeder for BybitExchange {
 
 
 
-fn process_bybit_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_type: &str, config: &ExchangeConfig, multi_port_sender: Option<Arc<MultiPortUdpSender>>) {
+fn process_bybit_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_type: &str, config: &ExchangeConfig, multi_port_sender: Option<Arc<MultiPortUdpSender>>, orderbook_senders: Arc<HashMap<String, mpsc::Sender<BybitOrderBookUpdate>>>) {
     // Add debug to see all messages
     if !text.contains("pong") && !text.contains("ping") {
         debug!("{}", crate::core::safe_websocket_message_log("Bybit", text));
@@ -538,64 +579,26 @@ fn process_bybit_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_typ
                 })
                 .unwrap_or_default();
 
-            // Handle snapshot vs delta internally for Bybit
-            // For snapshot: full orderbook replacement
-            // For delta: incremental updates (quantity=0 means delete)
-            match message_type {
-                "snapshot" => {
-                    debug!("[Bybit] Processing snapshot for {}", original_symbol);
-                    // For snapshots, use all data as-is
-                },
-                "delta" => {
-                    debug!("[Bybit] Processing delta update for {} (bids: {}, asks: {})",
-                        original_symbol, bids.len(), asks.len());
-                    // For deltas, we still pass all data but log the distinction
-                    // Downstream consumers can handle quantity=0 as deletion if needed
-                },
-                _ => {
-                    debug!("[Bybit] Unknown message type '{}' for {}", message_type, original_symbol);
-                }
-            }
-
-            let orderbook = crate::core::OrderBookData {
-                exchange: "Bybit".to_string(),
-                symbol: common_symbol,
-                asset_type: asset_type.to_string(),
+            // Send update to per-symbol orderbook builder task via channel
+            let update = BybitOrderBookUpdate {
+                message_type: message_type.to_string(),
                 bids,
                 asks,
+                timestamp,
                 price_precision,
                 quantity_precision,
-                timestamp,
                 timestamp_unit: config.feed_config.timestamp_unit,
             };
 
-            {
-                let mut orderbooks = crate::core::ORDERBOOKS.write();
-                orderbooks.push(orderbook.clone());
-                // println!("[Bybit][{}] Orderbook stored. Now ORDERBOOKS count: {}", stream_type, orderbooks.len());
-            }
-            
-            // Send UDP packet using multi-port sender if enabled, fallback to single-port
-            debug!("Bybit: Receiving orderbook data for {}", orderbook.symbol);
-            if USE_MULTI_PORT_UDP {
-                if let Some(sender) = &multi_port_sender {
-                    let _ = sender.send_orderbook_data(orderbook.clone());
-                } else {
-                    // Fallback to single-port
-                    if let Some(sender) = crate::core::get_binary_udp_sender() {
-                        let _ = sender.send_orderbook_data(orderbook.clone());
-                    }
+            // Find the channel for this symbol and send the update
+            if let Some(sender) = orderbook_senders.get(&common_symbol) {
+                // Try to send (non-blocking)
+                if let Err(e) = sender.try_send(update) {
+                    warn!("[Bybit] Failed to send orderbook update for {}: {:?}", common_symbol, e);
                 }
             } else {
-                // Use original single-port sender
-                if let Some(sender) = crate::core::get_binary_udp_sender() {
-                    let _ = sender.send_orderbook_data(orderbook.clone());
-                }
+                warn!("[Bybit] No orderbook builder found for symbol: {}", common_symbol);
             }
-            debug!("Bybit: Sent UDP packet for {} orderbook with {} bids, {} asks",
-                orderbook.symbol, orderbook.bids.len(), orderbook.asks.len());
-            
-            crate::core::COMPARE_NOTIFY.notify_waiters();
         } else {
             debug!("[Bybit] Unhandled topic: {}", topic);
         }

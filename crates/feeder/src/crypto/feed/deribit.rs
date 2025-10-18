@@ -3,7 +3,9 @@ use async_trait::async_trait;
 use tokio_tungstenite::{WebSocketStream, MaybeTlsStream, tungstenite::protocol::Message};
 use futures_util::{SinkExt, StreamExt};
 use serde_json::{Value, json};
+use tokio::sync::mpsc;
 use super::websocket_config::connect_with_large_buffer;
+use super::deribit_orderbook_builder::{spawn_orderbook_builder, DeribitOrderBookUpdate};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
@@ -11,7 +13,7 @@ use tracing::{debug, info, warn, error};
 use futures_util::future::FutureExt;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use crate::core::{OrderBookData, Feeder, SymbolMapper, CONNECTION_STATS, get_shutdown_receiver, parse_to_scaled_or_default, MultiPortUdpSender, get_multi_port_sender};
+use crate::core::{Feeder, SymbolMapper, CONNECTION_STATS, get_shutdown_receiver, MultiPortUdpSender, get_multi_port_sender};
 use crate::error::Result;
 use crate::load_config::ExchangeConfig;
 
@@ -20,7 +22,8 @@ pub struct DeribitExchange {
     symbol_mapper: Arc<SymbolMapper>,
     ws_streams: HashMap<(String, String, usize), Option<WebSocketStream<MaybeTlsStream<tokio::net::TcpStream>>>>,
     active_connections: Arc<AtomicUsize>,
-    orderbooks: Arc<parking_lot::RwLock<HashMap<String, OrderBookData>>>,
+    // Per-symbol orderbook update channels (lock-free architecture)
+    orderbook_senders: Arc<HashMap<String, mpsc::Sender<DeribitOrderBookUpdate>>>,
     multi_port_sender: Option<Arc<MultiPortUdpSender>>,
 }
 
@@ -36,13 +39,39 @@ impl DeribitExchange {
     pub fn new(config: ExchangeConfig, symbol_mapper: Arc<SymbolMapper>) -> Self {
         const SYMBOLS_PER_CONNECTION: usize = 10;
         let mut ws_streams = HashMap::new();
+        let mut orderbook_senders = HashMap::new();
 
         // Combine futures and option symbols
-        let total_symbols = config.subscribe_data.futures_symbols.len() + config.subscribe_data.option_symbols.len();
+        let mut all_symbols = config.subscribe_data.futures_symbols.clone();
+        all_symbols.extend(config.subscribe_data.option_symbols.clone());
+
+        let total_symbols = all_symbols.len();
         let num_chunks = (total_symbols + SYMBOLS_PER_CONNECTION - 1) / SYMBOLS_PER_CONNECTION;
 
         debug!("Deribit constructor - {} symbols, {} per connection = {} connections per stream type",
             total_symbols, SYMBOLS_PER_CONNECTION, num_chunks);
+
+        info!("Deribit: Spawning {} orderbook builder tasks (per-symbol architecture)", total_symbols);
+
+        // Spawn per-symbol orderbook builder task for each symbol
+        for asset_type in &config.feed_config.asset_type {
+            for symbol in &all_symbols {
+                // Map the symbol to common format for storage key
+                let common_symbol = match symbol_mapper.map("Deribit", symbol) {
+                    Some(mapped) => mapped,
+                    None => symbol.clone(),
+                };
+
+                let sender = spawn_orderbook_builder(
+                    "Deribit".to_string(),
+                    common_symbol.clone(),
+                    asset_type.clone(),
+                );
+
+                orderbook_senders.insert(common_symbol, sender);
+                debug!("Deribit: Spawned orderbook builder task for {} ({})", symbol, asset_type);
+            }
+        }
 
         // Initialize separate connections for trade and orderbook streams
         for asset_type in &config.feed_config.asset_type {
@@ -61,7 +90,7 @@ impl DeribitExchange {
             symbol_mapper,
             ws_streams,
             active_connections: Arc::new(AtomicUsize::new(0)),
-            orderbooks: Arc::new(parking_lot::RwLock::new(HashMap::new())),
+            orderbook_senders: Arc::new(orderbook_senders),
             multi_port_sender: None, // Will be set in ensure_sender()
         }
     }
@@ -193,7 +222,7 @@ impl Feeder for DeribitExchange {
                 let chunk_idx = *chunk_idx;
                 let symbol_mapper = self.symbol_mapper.clone();
                 let active_connections = self.active_connections.clone();
-                let orderbooks = self.orderbooks.clone();
+                let orderbook_senders = self.orderbook_senders.clone();
                 let config = self.config.clone();
                 let multi_port_sender = self.multi_port_sender.clone();
 
@@ -244,7 +273,7 @@ impl Feeder for DeribitExchange {
                                 match msg {
                                     Some(Ok(Message::Text(text))) => {
                                         last_message_time = std::time::Instant::now();
-                                        process_deribit_message(&text, symbol_mapper.clone(), &asset_type, orderbooks.clone(), &config, multi_port_sender.clone());
+                                        process_deribit_message(&text, symbol_mapper.clone(), &asset_type, orderbook_senders.clone(), &config, multi_port_sender.clone());
                                     },
                                     Some(Ok(Message::Pong(_))) => {
                                         last_message_time = std::time::Instant::now();
@@ -330,7 +359,7 @@ impl Feeder for DeribitExchange {
     }
 }
 
-fn process_deribit_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_type: &str, orderbooks: Arc<parking_lot::RwLock<HashMap<String, OrderBookData>>>, config: &ExchangeConfig, multi_port_sender: Option<Arc<MultiPortUdpSender>>) {
+fn process_deribit_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_type: &str, orderbook_senders: Arc<HashMap<String, mpsc::Sender<DeribitOrderBookUpdate>>>, config: &ExchangeConfig, multi_port_sender: Option<Arc<MultiPortUdpSender>>) {
     use std::sync::atomic::{AtomicU64, Ordering};
     static MESSAGE_COUNT: AtomicU64 = AtomicU64::new(0);
 
@@ -483,10 +512,7 @@ fn process_deribit_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_t
                             let original_symbol = data.get("instrument_name").and_then(Value::as_str).unwrap_or_default();
                             let common_symbol = match symbol_mapper.map("Deribit", original_symbol) {
                                 Some(symbol) => symbol,
-                                None => {
-                                    // Use original symbol if no mapping exists
-                                    original_symbol.to_string()
-                                }
+                                None => original_symbol.to_string()
                             };
 
                             // HFT: Get precision BEFORE parsing orderbook
@@ -495,26 +521,15 @@ fn process_deribit_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_t
 
                             let timestamp = data.get("timestamp").and_then(Value::as_i64).unwrap_or_default().max(0) as u64;
 
-                            let mut orderbooks = orderbooks.write();
-                            let orderbook = orderbooks.entry(common_symbol.clone()).or_insert_with(|| crate::core::OrderBookData {
-                                exchange: "Deribit".to_string(),
-                                symbol: common_symbol.clone(),
-                                asset_type: asset_type.to_string(),
-                                bids: Vec::new(),
-                                asks: Vec::new(),
-                                price_precision,
-                                quantity_precision: qty_precision,
-                                timestamp: 0,
-                                timestamp_unit: config.feed_config.timestamp_unit,
-                            });
+                            let mut bid_updates: Vec<(String, i64, i64)> = Vec::new();
+                            let mut ask_updates: Vec<(String, i64, i64)> = Vec::new();
 
-                            orderbook.timestamp = timestamp;
-
+                            // Parse bid updates
                             if let Some(bids) = data.get("bids").and_then(Value::as_array) {
                                 for bid in bids {
                                     if let Some(bid_arr) = bid.as_array() {
                                         if bid_arr.len() == 3 {
-                                            let change_type = bid_arr[0].as_str().unwrap_or_default();
+                                            let action = bid_arr[0].as_str().unwrap_or_default().to_string();
                                             let price = bid_arr[1].as_f64()
                                                 .map(|v| (v * 10_f64.powi(price_precision as i32)) as i64)
                                                 .unwrap_or(0);
@@ -522,29 +537,18 @@ fn process_deribit_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_t
                                                 .map(|v| (v * 10_f64.powi(qty_precision as i32)) as i64)
                                                 .unwrap_or(0);
 
-                                            match change_type {
-                                                "new" | "change" => {
-                                                    if let Some(entry) = orderbook.bids.iter_mut().find(|(p, _)| *p == price) {
-                                                        entry.1 = quantity;
-                                                    } else {
-                                                        orderbook.bids.push((price, quantity));
-                                                    }
-                                                }
-                                                "delete" => {
-                                                    orderbook.bids.retain(|(p, _)| *p != price);
-                                                }
-                                                _ => {}
-                                            }
+                                            bid_updates.push((action, price, quantity));
                                         }
                                     }
                                 }
                             }
 
+                            // Parse ask updates
                             if let Some(asks) = data.get("asks").and_then(Value::as_array) {
                                 for ask in asks {
                                     if let Some(ask_arr) = ask.as_array() {
                                         if ask_arr.len() == 3 {
-                                            let change_type = ask_arr[0].as_str().unwrap_or_default();
+                                            let action = ask_arr[0].as_str().unwrap_or_default().to_string();
                                             let price = ask_arr[1].as_f64()
                                                 .map(|v| (v * 10_f64.powi(price_precision as i32)) as i64)
                                                 .unwrap_or(0);
@@ -552,39 +556,29 @@ fn process_deribit_message(text: &str, symbol_mapper: Arc<SymbolMapper>, asset_t
                                                 .map(|v| (v * 10_f64.powi(qty_precision as i32)) as i64)
                                                 .unwrap_or(0);
 
-                                            match change_type {
-                                                "new" | "change" => {
-                                                    if let Some(entry) = orderbook.asks.iter_mut().find(|(p, _)| *p == price) {
-                                                        entry.1 = quantity;
-                                                    } else {
-                                                        orderbook.asks.push((price, quantity));
-                                                    }
-                                                }
-                                                "delete" => {
-                                                    orderbook.asks.retain(|(p, _)| *p != price);
-                                                }
-                                                _ => {}
-                                            }
+                                            ask_updates.push((action, price, quantity));
                                         }
                                     }
                                 }
                             }
 
-                            orderbook.bids.sort_by(|a, b| b.0.cmp(&a.0));
-                            orderbook.asks.sort_by(|a, b| a.0.cmp(&b.0));
+                            // Send update via channel to per-symbol task
+                            let update = DeribitOrderBookUpdate {
+                                bids: bid_updates,
+                                asks: ask_updates,
+                                timestamp,
+                                price_precision,
+                                quantity_precision: qty_precision,
+                                timestamp_unit: config.feed_config.timestamp_unit,
+                            };
 
-                            if let Some(sender) = &multi_port_sender {
-                                if let Err(e) = sender.send_orderbook_data(orderbook.clone()) {
-                                    error!("[DERIBIT] Failed to send orderbook UDP: {}", e);
-                                } else if count % 5000 == 0 {
-                                    debug!("[DERIBIT] Successfully sending orderbook updates via UDP (sample: {} with {} bids, {} asks)",
-                                        orderbook.symbol, orderbook.bids.len(), orderbook.asks.len());
+                            if let Some(sender) = orderbook_senders.get(&common_symbol) {
+                                if let Err(e) = sender.try_send(update) {
+                                    warn!("[Deribit] [{}] Failed to send orderbook update to channel: {:?}", common_symbol, e);
                                 }
-                            } else if count % 500 == 0 {
-                                warn!("[DERIBIT] Multi-port sender not available for orderbook data");
+                            } else {
+                                warn!("[Deribit] [{}] No orderbook sender found for update", common_symbol);
                             }
-
-                            crate::core::COMPARE_NOTIFY.notify_waiters();
                         }
                     }
                 }
